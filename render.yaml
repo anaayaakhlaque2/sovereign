@@ -2,10 +2,8 @@ services:
   - type: web
     name: sovereign-distributed-simulator
     env: python
-    buildCommand: "pip install -r requirements.txt && cd frontend && npm install && npm run build && cd .."
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "python run.py --host 0.0.0.0 --port $PORT --no-browser"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
-      - key: NODE_VERSION
-        value: 20.10.0
