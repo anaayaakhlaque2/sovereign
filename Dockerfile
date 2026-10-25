@@ -1,13 +1,4 @@
-# Multi-stage Dockerfile for Sovereign 3D Simulator
-# Stage 1: Build React Three Fiber production bundle
-FROM node:20-alpine AS frontend-builder
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ ./
-RUN npm run build
-
-# Stage 2: Production Python Runtime
+# Production Dockerfile for Sovereign 3D Simulator
 FROM python:3.12-slim
 WORKDIR /app
 
@@ -20,13 +11,13 @@ ENV PORT=8000
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code and built frontend
+# Copy backend code, launcher, and precompiled production frontend distribution
 COPY backend/ ./backend/
 COPY run.py .
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY frontend/dist ./frontend/dist
 
 # Expose HTTP & WebSocket port
 EXPOSE 8000
 
 # Launch kingdom cluster
-CMD ["python", "run.py", "--host", "0.0.0.0", "--port", "8000", "--no-browser"]
+CMD ["python", "run.py", "--host", "0.0.0.0", "--no-browser"]
