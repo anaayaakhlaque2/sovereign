@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sovereign: when the king falls, the network crowns another</title>
+<script>document.documentElement.classList.add('anim');setTimeout(function(){if(!window.gsap)document.documentElement.classList.remove('anim')},6000)</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#050810;--ink:#eef1fa;--mute:#9aa3bd;--gold:#e8c36a;--gold2:#ffe3a1;--ember:#ff6b3d;--ice:#6fb3ff;--glass:rgba(12,17,34,.58);--line:rgba(232,195,106,.2);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:radial-gradient(120% 90% at 50% 0%,#101a3a 0%,var(--bg) 60%);color:var(--ink);font:400 17px/1.65 Inter,system-ui,sans-serif;overflow-x:hidden}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+#bar{position:fixed;left:0;top:0;width:3px;height:100%;background:linear-gradient(var(--gold2),var(--ember));transform-origin:top;transform:scaleY(0);z-index:30}
+nav{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:calc(14px + env(safe-area-inset-top,0px)) 5vw 14px;background:linear-gradient(var(--bg),transparent)}
+.brand{display:flex;align-items:center;gap:12px;font:700 20px Cinzel,serif;letter-spacing:.14em;color:var(--gold2);text-decoration:none}
+.brand svg{width:34px;height:34px}
+nav .links{display:flex;gap:28px;align-items:center}
+nav a.l{color:var(--mute);text-decoration:none;font-size:15px;transition:color .2s}
+nav a.l:hover{color:var(--ink)}
+main{position:relative;z-index:5}
+.btn{position:relative;overflow:hidden;border:0;cursor:pointer;font:600 16px Inter,sans-serif;color:#1a1204;padding:14px 30px;border-radius:999px;background:linear-gradient(135deg,#fff0c0,var(--gold) 50%,#c8932f);box-shadow:0 0 0 1px rgba(255,227,161,.5),0 10px 40px -8px rgba(232,195,106,.7);transition:transform .25s,box-shadow .25s}
+.btn:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 0 0 1px #fff3cf,0 18px 60px -6px rgba(232,195,106,.95)}
+.btn::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.7),transparent);transform:skewX(-20deg);animation:shine 3.6s infinite}
+@keyframes shine{0%,60%{left:-60%}100%{left:130%}}
+.btn.sm{padding:9px 20px;font-size:14px}.btn.lg{padding:20px 48px;font-size:19px}
+.ghost{color:var(--ink);text-decoration:none;padding:14px 26px;border:1px solid var(--line);border-radius:999px;background:var(--glass);backdrop-filter:blur(10px);transition:border-color .2s}
+.ghost:hover{border-color:var(--gold)}
+:focus-visible{outline:2px solid var(--gold2);outline-offset:3px}
+.hero{position:relative;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;text-align:center;padding:15vh 6vw 0}
+.hero-in{width:100%;max-width:1400px}
+.crest{width:92px;height:92px;margin:0 auto 18px;filter:drop-shadow(0 0 24px rgba(232,195,106,.6))}
+h1{font:900 clamp(34px,9.4vw,132px)/1 Cinzel,serif;letter-spacing:.04em;white-space:nowrap;margin:0;perspective:700px;filter:drop-shadow(0 6px 40px rgba(232,195,106,.4))}
+h1 span{display:inline-block;background:linear-gradient(180deg,#fff6d6,var(--gold) 55%,#b57f22);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{text-shadow:0 2px 18px #050810,0 0 8px #050810;font-size:clamp(18px,2.4vw,24px);color:#cfd6ea;max-width:620px;margin:22px auto 34px;font-weight:300}
+.cta-row{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.hint{position:absolute;bottom:calc(26px + env(safe-area-inset-bottom,0px));left:50%;width:1px;height:54px;background:linear-gradient(var(--gold),transparent);animation:drop 2s infinite}
+@keyframes drop{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+.chap{min-height:115vh;display:flex;align-items:center;padding:0 7vw}
+.chap.r{justify-content:flex-end}
+.panel{max-width:520px;padding:34px 36px;border:1px solid var(--line);border-radius:22px;background:var(--glass);backdrop-filter:blur(16px);box-shadow:0 30px 80px -30px #000}
+.k{font:700 15px Cinzel,serif;letter-spacing:.12em;color:var(--gold)}
+h2{font:700 clamp(30px,4.4vw,52px)/1.1 Cinzel,serif;margin:8px 0 14px;color:#fff6dc}
+.panel p{margin:0 0 12px;color:#c3cbe2}
+.row{display:flex;gap:12px;align-items:flex-start;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.row b{font:700 17px Cinzel,serif;color:var(--gold2);min-width:62px}
+.row span{color:#b4bdd6;font-size:15.5px}
+.chip{display:inline-block;padding:3px 12px;margin:4px 6px 0 0;border-radius:99px;font-size:13px;border:1px solid currentColor}
+.sec{padding:14vh 7vw;max-width:1280px;margin:0 auto}
+.sec>h2{text-align:center;max-width:820px;margin:0 auto 12px}
+.lead{text-align:center;color:var(--mute);max-width:620px;margin:0 auto 56px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:22px}
+.card{--gx:50%;--gy:50%;position:relative;padding:30px;border-radius:20px;border:1px solid var(--line);background:radial-gradient(260px circle at var(--gx) var(--gy),rgba(232,195,106,.16),transparent 70%),var(--glass);backdrop-filter:blur(14px);transition:transform .15s ease-out;will-change:transform}
+.card:nth-child(2){border-radius:20px 20px 60px 20px}.card:nth-child(3){border-radius:60px 20px 20px 20px}
+.card h3{font:700 22px Cinzel,serif;color:var(--gold2);margin:0 0 8px}
+.card p{margin:0;color:#b4bdd6;font-size:15.5px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0;position:relative}
+.step{padding:10px 28px 10px 0}
+.step i{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;font:700 20px Cinzel,serif;color:var(--gold2);border:1px solid var(--gold);background:#0b1124;box-shadow:0 0 30px -4px rgba(232,195,106,.6);font-style:normal;margin-bottom:16px}
+.step h3{font:700 21px Cinzel,serif;margin:0 0 6px;color:#fff6dc}.step p{margin:0;color:#aab3cd;font-size:15.5px}
+.stats{display:flex;flex-wrap:wrap;gap:40px 70px;justify-content:center;padding:6vh 7vw}
+.stat{text-align:center}.stat b{display:block;font:900 clamp(44px,7vw,84px)/1 Cinzel,serif;color:var(--gold2)}.stat span{color:var(--mute);font-size:15px}
+.final{min-height:90vh;display:grid;place-items:center;text-align:center;padding:10vh 7vw}
+.final h2{font-size:clamp(36px,6.4vw,78px);max-width:900px}
+.final p{color:#c3cbe2;max-width:540px;margin:0 auto 34px}
+footer{padding:30px 7vw calc(40px + env(safe-area-inset-bottom,0px));text-align:center;color:#6f7893;font-size:14px}
+#toast{position:fixed;left:50%;bottom:calc(30px + env(safe-area-inset-bottom,0px));transform:translate(-50%,160%);z-index:40;padding:14px 24px;border-radius:14px;background:#10172e;border:1px solid var(--gold);color:var(--gold2);transition:transform .5s cubic-bezier(.2,1.2,.3,1);max-width:90vw;text-align:center}
+#toast.on{transform:translate(-50%,0)}
+.anim .fade,.anim nav{opacity:0}
+@media(max-width:760px){nav .links a.l{display:none}.panel{padding:26px}.chap,.chap.r{justify-content:center}.step{padding-bottom:26px}}
+@media(prefers-reduced-motion:reduce){.btn::after,.hint{animation:none}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset=".55" stop-color="#e8c36a"/><stop offset="1" stop-color="#b57f22"/></linearGradient>
+<symbol id="logo" viewBox="0 0 64 64"><polygon points="32,3 58,18 58,46 32,61 6,46 6,18" fill="#0a1022" stroke="url(#g)" stroke-width="2.2"/><path d="M16 42 L14 24 L24 33 L32 20 L40 33 L50 24 L48 42 Z" fill="url(#g)"/><rect x="16" y="44" width="32" height="4" rx="1.5" fill="url(#g)"/><circle cx="14" cy="24" r="2.4" fill="#fff3c4"/><circle cx="32" cy="20" r="2.4" fill="#fff3c4"/><circle cx="50" cy="24" r="2.4" fill="#fff3c4"/></symbol>
+</defs></svg>
+<canvas id="gl"></canvas><div id="bar"></div>
+<nav>
+  <a class="brand" href="#top" aria-label="Sovereign home"><svg><use href="#logo"/></svg>SOVEREIGN</a>
+  <div class="links"><a class="l" href="#story">The story</a><a class="l" href="#features">Features</a><a class="l" href="#how">How it works</a><button class="btn sm" data-start>Get started</button></div>
+</nav>
+<main id="top">
+  <header class="hero">
+    <div class="hero-in">
+      <svg class="crest fade"><use href="#logo"/></svg>
+      <h1 id="title">SOVEREIGN</h1>
+      <p class="sub fade">When the king falls, the network crowns another. Crash a leader and watch real nodes elect a new one, live, in 3D.</p>
+      <div class="cta-row fade"><button class="btn" data-start>Get started</button><a class="ghost" href="#story">See how it works</a></div>
+    </div>
+    <div class="hint" aria-hidden="true"></div>
+  </header>
+
+  <section class="chap" id="story">
+    <div class="panel reveal">
+      <div class="k">Chapter 1</div>
+      <h2>The king falls</h2>
+      <p>Every distributed system has a leader that coordinates the others. Then it crashes, and the heartbeats stop.</p>
+      <p>No one is in charge, and no human is coming to help. The nodes have to notice the silence and fix it themselves.</p>
+    </div>
+  </section>
+
+  <section class="chap r">
+    <div class="panel reveal">
+      <div class="k">Chapter 2</div>
+      <h2>The election</h2>
+      <p>Each castle is a real process sending real messages. Two classic algorithms compete to pick the next leader.</p>
+      <div class="row"><b>Bully</b><span>Shout upward. Any node with a higher ID answers and takes over. Fast, but chatty: up to n² messages.</span></div>
+      <div class="row"><b>Ring</b><span>Pass a token around the circle, collecting every live ID. Calm and orderly: about 2n messages.</span></div>
+      <span class="chip" style="color:#ff9a62">ELECTION</span><span class="chip" style="color:#6be59c">OK</span><span class="chip" style="color:var(--gold)">COORDINATOR</span>
+    </div>
+  </section>
+
+  <section class="chap" id="c3">
+    <div class="panel reveal">
+      <div class="k">Chapter 3</div>
+      <h2>A new sovereign rises</h2>
+      <p>The highest living ID wins. The crown moves, the realm agrees, and every message is counted so you can compare both algorithms with real numbers.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="features">
+    <h2 class="reveal">A real distributed system, with a stage built for it</h2>
+    <p class="lead reveal">Nothing here is a fake animation. The 3D kingdom is a live view of processes that really talk to each other.</p>
+    <div class="grid">
+      <div class="card"><h3>Real processes</h3><p>Every node is its own program with its own port, talking over TCP with timestamped messages.</p></div>
+      <div class="card"><h3>Bully and Ring, side by side</h3><p>Switch algorithms mid-run and see the difference in messages, speed and drama.</p></div>
+      <div class="card"><h3>A kingdom you can break</h3><p>Click a castle to crash it, assassinate the king, slow the network, or let chaos mode loose.</p></div>
+      <div class="card"><h3>Numbers that prove it</h3><p>Live logs, per-election message counts and replay turn each election into evidence.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" id="how">
+    <h2 class="reveal">Three moves to a new king</h2>
+    <p class="lead reveal">Everything you need to explain distributed election in one demo.</p>
+    <div class="steps">
+      <div class="step"><i>1</i><h3>Crash the leader</h3><p>Kill any castle, or the king himself, and watch heartbeats go silent.</p></div>
+      <div class="step"><i>2</i><h3>Watch the vote</h3><p>Messages travel the roads as glowing orbs while the nodes argue it out.</p></div>
+      <div class="step"><i>3</i><h3>Compare the cost</h3><p>See how many messages each algorithm needed and how long the crown stayed empty.</p></div>
+    </div>
+  </section>
+
+  <div class="stats">
+    <div class="stat"><b data-n="5">0</b><span>live node processes</span></div>
+    <div class="stat"><b data-n="2">0</b><span>election algorithms</span></div>
+    <div class="stat"><b data-n="9">0</b><span>nodes at maximum</span></div>
+    <div class="stat"><b data-n="60">0</b><span>frames per second target</span></div>
+  </div>
+
+  <section class="final">
+    <div class="reveal">
+      <h2>Ready to crown a new king?</h2>
+      <p>Open the control room, crash the leader, and see how a network decides who rules.</p>
+      <button class="btn lg" data-start>Get started</button>
+    </div>
+  </section>
+  <footer>Sovereign, a Distributed Computing mini project on leader election.</footer>
+</main>
+<div id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)),lerp=(a,b,t)=>a+(b-a)*t;
+const sst=(a,b,x)=>{x=clamp((x-a)/(b-a));return x*x*(3-2*x)};
+
+/* GET STARTED: integration point. Replace the body with your router or location change. */
+function onGetStarted(){
+  window.dispatchEvent(new CustomEvent('sovereign:start'));
+  try {
+    window.parent.postMessage({ type: 'SOVEREIGN_START' }, '*');
+  } catch (err) {
+    console.error(err);
+  }
+}
+$$('[data-start]').forEach(b=>b.addEventListener('click',onGetStarted));
+
+/* page animation */
+gsap.registerPlugin(ScrollTrigger);
+const h=$('#title');h.setAttribute('aria-label','Sovereign');h.innerHTML=[...h.textContent].map(c=>`<span aria-hidden="true">${c}</span>`).join('');
+const IN=3.6;gsap.set('#title span',{yPercent:120,opacity:0,rotateX:-90});
+gsap.to('#title span',{yPercent:0,opacity:1,rotateX:0,stagger:.07,duration:1.3,ease:'power4.out',delay:IN});
+gsap.fromTo('.fade',{y:34,opacity:0},{y:0,opacity:1,stagger:.2,duration:1,delay:IN+.5,ease:'power3.out'});
+gsap.fromTo('nav',{y:-30,opacity:0},{y:0,opacity:1,duration:1.2,delay:IN+1.8,ease:'power3.out'});
+gsap.to('.hero-in',{yPercent:-18,opacity:0,ease:'none',scrollTrigger:{trigger:'.hero',start:'top top',end:'bottom 20%',scrub:true}});
+$$('.reveal').forEach(el=>gsap.from(el,{y:70,opacity:0,duration:1.1,ease:'power3.out',scrollTrigger:{trigger:el,start:'top 85%'}}));
+['.card','.step'].forEach(s=>{gsap.set(s,{opacity:0,y:60});ScrollTrigger.batch(s,{start:'top 88%',once:true,onEnter:b=>gsap.to(b,{opacity:1,y:0,stagger:.14,duration:.9,ease:'power3.out',clearProps:'transform'})})});
+$$('[data-n]').forEach(el=>ScrollTrigger.create({trigger:el,start:'top 92%',once:true,onEnter:()=>{const o={v:0};gsap.to(o,{v:+el.dataset.n,duration:1.8,ease:'power2.out',onUpdate:()=>el.textContent=Math.round(o.v)})}}));
+$$('.card').forEach(c=>{
+  c.addEventListener('pointermove',e=>{const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;
+    c.style.transform=`perspective(700px) rotateY(${x*14}deg) rotateX(${-y*14}deg) translateZ(10px)`;c.style.setProperty('--gx',(x+.5)*100+'%');c.style.setProperty('--gy',(y+.5)*100+'%')});
+  c.addEventListener('pointerleave',()=>c.style.transform='');
+});
+
+/* 3D scene */
+(function(){
+  const cv=$('#gl');let renderer;
+  try{renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true})}catch(e){return}
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x050810,.028);
+  const cam=new THREE.PerspectiveCamera(52,1,.1,300);
+  scene.add(new THREE.AmbientLight(0x7080bb,.9));
+  const key=new THREE.PointLight(0xffd88a,2.2,50);key.position.set(0,9,0);scene.add(key);
+  const rim=new THREE.PointLight(0x6fb3ff,1.4,60);rim.position.set(-12,4,-10);scene.add(rim);
+
+  const halo=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),g=x.createRadialGradient(64,64,0,64,64,64);g.addColorStop(0,'rgba(255,230,160,1)');g.addColorStop(.35,'rgba(232,195,106,.35)');g.addColorStop(1,'rgba(232,195,106,0)');x.fillStyle=g;x.fillRect(0,0,128,128);return new THREE.CanvasTexture(c)})();
+  const label=n=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');x.font='700 70px Georgia,serif';x.textAlign='center';x.fillStyle='#ffe3a1';x.fillText(n,64,90);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false}));s.scale.set(1.1,1.1,1);return s};
+
+  // stars
+  const sp=new Float32Array(2400*3);for(let i=0;i<2400;i++){const r=70+Math.random()*90,a=Math.random()*6.283,b=Math.acos(2*Math.random()-1);sp.set([r*Math.sin(b)*Math.cos(a),r*Math.cos(b),r*Math.sin(b)*Math.sin(a)],i*3)}
+  const stars=new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.BufferAttribute(sp,3)),new THREE.PointsMaterial({size:.5,color:0xb5c3ff,transparent:true,opacity:.85,fog:false,sizeAttenuation:true}));scene.add(stars);
+
+  // island
+  const isl=new THREE.Mesh(new THREE.CylinderGeometry(8.6,6.2,.9,64),new THREE.MeshStandardMaterial({color:0x0e1530,emissive:0x080e24,roughness:.9,flatShading:true}));isl.position.y=-.5;scene.add(isl);
+  const rg=new THREE.Mesh(new THREE.TorusGeometry(8.6,.045,8,128),new THREE.MeshBasicMaterial({color:0xe8c36a}));rg.rotation.x=Math.PI/2;rg.position.y=-.05;scene.add(rg);
+  const under=new THREE.Mesh(new THREE.ConeGeometry(6.2,6,48,1,true),new THREE.MeshStandardMaterial({color:0x0a1022,flatShading:true,side:THREE.DoubleSide}));under.rotation.x=Math.PI;under.position.y=-3.9;scene.add(under);
+
+  // castles
+  const R=5.2,nodes=[],gold=new THREE.Color(0xe8c36a),violet=new THREE.Color(0x5b6cff),dark=new THREE.Color(0x4a1410),ember=new THREE.Color(0xff5a2a),slate=new THREE.Color(0x1b2a66),warm=new THREE.Color(0x6b4a12);
+  for(let i=0;i<5;i++){
+    const a=i/5*Math.PI*2+Math.PI/2,g=new THREE.Group();g.position.set(Math.cos(a)*R,0,Math.sin(a)*R);
+    const m=new THREE.MeshStandardMaterial({color:0x2a3358,emissive:slate.clone(),emissiveIntensity:.9,flatShading:true,roughness:.6,metalness:.25});
+    const rm=new THREE.MeshStandardMaterial({color:violet.clone(),emissive:violet.clone(),emissiveIntensity:.5,flatShading:true});
+    const b=new THREE.Mesh(new THREE.CylinderGeometry(.75,.92,1.3,6),m);b.position.y=.65;
+    const t=new THREE.Mesh(new THREE.CylinderGeometry(.5,.58,.85,6),m);t.position.y=1.72;
+    const r=new THREE.Mesh(new THREE.ConeGeometry(.7,.95,6),rm);r.position.y=2.6;
+    const ring=new THREE.Mesh(new THREE.RingGeometry(1.15,1.45,48),new THREE.MeshBasicMaterial({color:0x6fb3ff,transparent:true,opacity:.25,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false}));ring.rotation.x=-Math.PI/2;ring.position.y=.03;
+    const lb=label(i+1);lb.position.set(0,3.5,0);
+    g.add(b,t,r,ring,lb);scene.add(g);nodes.push({g,m,rm,ring,pos:g.position.clone()});
+  }
+  // roads
+  const roadMats=[],pairs=[];for(let i=0;i<5;i++)for(let j=i+1;j<5;j++){pairs.push([i,j]);
+    const pts=[nodes[i].pos.clone().setY(.15),nodes[j].pos.clone().setY(.15)];
+    const lm=new THREE.LineBasicMaterial({color:0xe8c36a,transparent:true,opacity:0});roadMats.push(lm);scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),lm))}
+
+  // crown + beam
+  const crown=new THREE.Group(),cm=new THREE.MeshStandardMaterial({color:0xe8c36a,emissive:0xffb830,emissiveIntensity:.9,side:THREE.DoubleSide,flatShading:true,metalness:.6,roughness:.3});
+  crown.add(new THREE.Mesh(new THREE.CylinderGeometry(.42,.34,.28,10,1,true),cm));
+  for(let i=0;i<5;i++){const s=new THREE.Mesh(new THREE.ConeGeometry(.09,.34,6),cm),a=i/5*6.283;s.position.set(Math.cos(a)*.4,.3,Math.sin(a)*.4);crown.add(s)}
+  const hs=new THREE.Sprite(new THREE.SpriteMaterial({map:halo,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));hs.scale.set(3.4,3.4,1);crown.add(hs);
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.06,.55,9,20,1,true),new THREE.MeshBasicMaterial({color:0xffd88a,transparent:true,opacity:.14,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false}));beam.position.y=-4.5;crown.add(beam);
+  scene.add(crown);
+
+  // message orbs
+  const cols=[0xff9a62,0x6be59c,0xe8c36a],orbs=[];
+  for(let i=0;i<28;i++){const o=new THREE.Mesh(new THREE.SphereGeometry(.11,12,12),new THREE.MeshBasicMaterial({color:0xcfd8ff,transparent:true}));
+    const h2=new THREE.Sprite(new THREE.SpriteMaterial({map:halo,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:0xffffff}));h2.scale.set(1,1,1);o.add(h2);scene.add(o);orbs.push({o,a:0,b:1,t:Math.random(),sp:.4+Math.random()*.5,live:false})}
+  // embers
+  const EN=140,ep=new Float32Array(EN*3),eg=new THREE.BufferGeometry();for(let i=0;i<EN;i++)ep.set([(Math.random()-.5)*18,Math.random()*8,(Math.random()-.5)*18],i*3);eg.setAttribute('position',new THREE.BufferAttribute(ep,3));
+  const emM=new THREE.PointsMaterial({size:.07,color:0xffd88a,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false});scene.add(new THREE.Points(eg,emM));
+
+  function size(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+  addEventListener('resize',size);size();
+  let mx=0,my=0,s=0,w=0,last=performance.now();const born=last;
+  addEventListener('pointermove',e=>{mx=e.clientX/innerWidth-.5;my=e.clientY/innerHeight-.5});
+  const c3=$('#c3'),max=()=>document.documentElement.scrollHeight-innerHeight,slen=()=>c3.offsetTop+c3.offsetHeight*.55;
+  addEventListener('scroll',()=>{$('#bar').style.transform=`scaleY(${clamp(scrollY/Math.max(1,max()))})`},{passive:true});
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches,tmp=new THREE.Vector3(),look=new THREE.Vector3();
+
+  function respawn(ob,elect,dead){
+    const alive=[0,1,2,3,4].filter(i=>!(dead&&i===4));let a=alive[Math.random()*alive.length|0],b;do{b=alive[Math.random()*alive.length|0]}while(b===a);
+    ob.a=a;ob.b=b;ob.t=0;ob.sp=.35+Math.random()*.5+elect*.5;
+    const c=elect>.3?cols[Math.random()*3|0]:0xcfd8ff;ob.o.material.color.setHex(c);ob.o.children[0].material.color.setHex(c);
+  }
+  function frame(now){
+    requestAnimationFrame(frame);
+    const dt=Math.min(.05,(now-last)/1000);last=now;const t=now/1000,k=1-Math.exp(-dt*4);const ig=(a,b)=>reduce?1:sst(a,b,(now-born)/1000);
+    const st=slen(),m=max();s=lerp(s,clamp(scrollY/st),k);w=lerp(w,clamp((scrollY-st)/Math.max(1,m-st)),k);
+    const death=sst(.2,.34,s),elect=sst(.36,.44,s)*(1-sst(.68,.76,s)),cr=sst(.74,.9,s),wide=w;
+    // camera
+    const narrow=innerWidth<760?1.4:1;
+    const ci=1-ig(0,5.8),ang=(reduce?0:t*.07)+s*2.6+w*1.4+mx*.3+ci*1.6;
+    const rad=(17-6.5*sst(.15,.4,s)+1.5*sst(.7,.95,s)+6*wide+8*ci)*narrow,hgt=6.2-2.2*sst(.15,.4,s)+10*wide+5*ci;
+    cam.position.set(Math.cos(ang)*rad,hgt+my*.8,Math.sin(ang)*rad);
+    look.set(0,.9+3.4*(1-sst(0,.14,s)),0).lerp(tmp.copy(nodes[3].pos).multiplyScalar(.5).setY(1.4),cr*(1-wide));cam.lookAt(look);
+    // castles
+    nodes.forEach((n,i)=>{
+      const pulse=.5+.5*Math.sin(t*6+i*1.3);const ap=ig(1+i*.38,2+i*.38),bo=ap<1?ap*(1+.18*Math.sin(ap*Math.PI)):1;n.g.scale.set(Math.max(.001,bo),Math.max(.001,bo)*(i===4?1-.62*death:1),Math.max(.001,bo));n.g.position.y=-(1-ap)*2.5;
+      if(i===4){
+        n.g.rotation.z=death*.3;
+        n.m.emissive.copy(slate).lerp(ember,death);n.m.emissiveIntensity=.9+death*(.4+.6*Math.sin(t*13+3))*(1-cr*.5);
+        n.rm.color.copy(gold).lerp(dark,death);n.rm.emissive.copy(gold).lerp(ember,death);n.rm.emissiveIntensity=.8-.5*death;
+        n.ring.material.color.setHex(0xe8c36a).lerp(new THREE.Color(0xff3a1a),death);n.ring.material.opacity=.3+.4*death*pulse*(1-cr);
+      }else if(i===3){
+        n.rm.color.copy(violet).lerp(gold,cr);n.rm.emissive.copy(violet).lerp(gold,cr);n.rm.emissiveIntensity=.5+cr*.7;
+        n.m.emissive.copy(slate).lerp(warm,cr);
+        n.ring.material.color.setHex(0x6fb3ff).lerp(gold,cr);n.ring.material.opacity=.22+elect*.5*pulse+cr*.45;
+      }else{n.ring.material.opacity=.22+elect*.55*pulse}
+    });
+    // crown
+    const from=nodes[4].pos,to=nodes[3].pos,fall=death*(1-cr);
+    const cI=ig(3.2,4.8);crown.position.set(lerp(from.x,to.x,cr),2.9+Math.sin(t*2)*.12+Math.sin(cr*Math.PI)*2.4-1.3*fall+(1-cI)*8,lerp(from.z,to.z,cr));
+    crown.rotation.y=t*1.1+(1-cI)*6;crown.scale.setScalar(Math.max(.001,(1+.3*cr-.35*fall)*cI));
+    hs.material.opacity=(1-.75*fall)*cI;beam.material.opacity=(.14*(1-.85*fall)+cr*.05)*cI;
+    // orbs
+    const n=Math.floor((5+elect*23)*ig(4.4,5.4));
+    orbs.forEach((ob,i)=>{
+      if(i>=n){ob.o.visible=false;ob.live=false;return}
+      if(!ob.live){ob.live=true;respawn(ob,elect,death>.5)}
+      ob.t+=dt*ob.sp;if(ob.t>1)respawn(ob,elect,death>.5);
+      const A=nodes[ob.a].pos,B=nodes[ob.b].pos;ob.o.visible=true;
+      ob.o.position.lerpVectors(A,B,ob.t);ob.o.position.y=1.1+Math.sin(ob.t*Math.PI)*.9;
+      ob.o.material.opacity=Math.sin(ob.t*Math.PI);
+    });
+    // embers + stars
+    const pa=eg.attributes.position;for(let i=0;i<EN;i++){let y=pa.getY(i)+dt*(.3+(i%5)*.08);if(y>8)y=0;pa.setY(i,y)}pa.needsUpdate=true;
+    stars.rotation.y=t*.004+s*.15;stars.material.opacity=.85*ig(0,1.8);emM.opacity=.7*ig(3.6,5);key.intensity=2.2*ig(.5,1.6);const iz=ig(.3,1.8);[isl,rg,under].forEach(o=>o.scale.set(Math.max(.001,iz),Math.max(.001,iz),Math.max(.001,iz)));roadMats.forEach((m,i)=>m.opacity=.16*ig(3+i*.12,3.7+i*.12));
+    renderer.render(scene,cam);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

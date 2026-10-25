@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #050810;
+  --ink: #eef1fa;
+  --mute: #9aa3bd;
+  --gold: #e8c36a;
+  --gold2: #ffe3a1;
+  --ember: #ff6b3d;
+  --ice: #6fb3ff;
+  --glass: rgba(12, 17, 34, 0.78);
+  --glass-dock: rgba(10, 15, 30, 0.88);
+  --line: rgba(232, 195, 106, 0.25);
+  --panel-bg: rgba(12, 17, 34, 0.82);
+  --panel-card: rgba(8, 12, 26, 0.75);
+}
+
+html.theme-night, html:not(.theme-day) {
+  color-scheme: dark;
+  --bg: #050810;
+  --ink: #eef1fa;
+  --mute: #9aa3bd;
+  --gold: #e8c36a;
+  --gold2: #ffe3a1;
+  --glass: rgba(12, 17, 34, 0.82);
+  --glass-dock: rgba(10, 15, 30, 0.92);
+  --line: rgba(232, 195, 106, 0.25);
+  --panel-bg: rgba(12, 17, 34, 0.88);
+  --panel-card: rgba(8, 12, 26, 0.8);
+}
+
+html.theme-day {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --ink: #0f172a;
+  --mute: #475569;
+  --gold: #b48312;
+  --gold2: #854d0e;
+  --gold-glow: rgba(180, 131, 18, 0.25);
+  --glass: rgba(255, 255, 255, 0.94);
+  --glass-dock: rgba(255, 255, 255, 0.96);
+  --line: rgba(180, 131, 18, 0.28);
+  --panel-bg: #ffffff;
+  --panel-card: #ffffff;
+  --card-border: #e2e8f0;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html.theme-day body {
+  background: radial-gradient(120% 90% at 50% 0%, #e0f2fe 0%, #f8fafc 65%);
+}
+
+html.theme-night body, html:not(.theme-day) body {
+  background: radial-gradient(120% 90% at 50% 0%, #101a3a 0%, var(--bg) 60%);
+}
+
+.font-cinzel {
+  font-family: 'Cinzel', Georgia, serif;
+}
+
+/* Glassmorphism panel styling */
+.glass-panel {
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  color: var(--ink);
+}
+
+html.theme-day .glass-panel {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(180, 131, 18, 0.25);
+  box-shadow: 0 15px 40px -10px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+}
+
+.glass-dock {
+  background: var(--glass-dock);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--line);
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.6), 0 0 25px -5px rgba(232, 195, 106, 0.2);
+  color: var(--ink);
+}
+
+html.theme-day .glass-dock {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(180, 131, 18, 0.28);
+  box-shadow: 0 20px 50px -10px rgba(15, 23, 42, 0.14), 0 0 20px -5px rgba(180, 131, 18, 0.15);
+  color: #0f172a;
+}
+
+.theme-item-card {
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+html.theme-day .theme-item-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+html.theme-night .theme-item-card, html:not(.theme-day) .theme-item-card {
+  background: rgba(10, 16, 32, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #eef1fa;
+}
+
+.glow-gold {
+  box-shadow: 0 0 25px -4px rgba(232, 195, 106, 0.6);
+}
+
+/* Custom discreet scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold);
+}
