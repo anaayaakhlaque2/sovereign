@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from typing import Callable, Coroutine, Optional, Any
 
@@ -98,6 +99,9 @@ class HeartbeatDetector:
                     )
                     self._waiting_for_ack = False
                     self._last_ack_time = time.time()
+                    # Add random jitter 0 to 300 ms to reduce simultaneous initiators (scaled for unit tests)
+                    max_jitter = 0.3 if self.timeout >= 1.0 else (self.timeout * 0.1)
+                    await asyncio.sleep(random.uniform(0.0, max_jitter))
                     await self.on_leader_failed()
                     continue
 
@@ -112,6 +116,8 @@ class HeartbeatDetector:
                         )
                         self._waiting_for_ack = False
                         self._last_ack_time = time.time()
+                        # Add random jitter 0 to 300 ms to reduce simultaneous initiators
+                        await asyncio.sleep(random.uniform(0.0, 0.3))
                         await self.on_leader_failed()
 
             except asyncio.CancelledError:

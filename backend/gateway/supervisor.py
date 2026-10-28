@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from typing import Any, Dict, List, Optional
+from backend.config import NODE_COUNT, BASE_PORT, get_node_ports
 from backend.protocol import AlgorithmType, ControlAction, NodeStatus
 
 logger = logging.getLogger("sovereign.supervisor")
@@ -23,7 +24,7 @@ class ClusterSupervisor:
     def __init__(
         self,
         gateway_telemetry_port: int = 9090,
-        default_count: int = 5,
+        default_count: int = NODE_COUNT,
         default_algorithm: AlgorithmType = AlgorithmType.BULLY,
     ) -> None:
         self.gateway_telemetry_port = gateway_telemetry_port
@@ -160,6 +161,34 @@ class ClusterSupervisor:
             results[nid] = rep if isinstance(rep, dict) else None
         return results
 
+    async def get_nodes_internal_state(self) -> Dict[int, Any]:
+        """Queries every running node process over TCP for its own internal view."""
+        results = {}
+        for nid in sorted(list(self.processes.keys())):
+            reply = await self.send_control(nid, {"action": ControlAction.GET_STATE.value})
+            if reply:
+                results[nid] = {
+                    "id": reply.get("id", nid),
+                    "status": reply.get("status"),
+                    "leader_id": reply.get("leader_id"),
+                    "algorithm": reply.get("algorithm"),
+                    "known_peers": reply.get("peers", []),
+                    "election_id": reply.get("current_election_id"),
+                    "lamport": reply.get("lamport", 0),
+                }
+            else:
+                cached = self.node_cache.get(nid, {})
+                results[nid] = {
+                    "id": nid,
+                    "status": cached.get("status", "DEAD"),
+                    "leader_id": cached.get("leader_id"),
+                    "algorithm": cached.get("algorithm", self.current_algorithm.value),
+                    "known_peers": list(self.node_ports.keys()),
+                    "election_id": None,
+                    "lamport": 0,
+                }
+        return results
+
     async def kill_node(self, node_id: int) -> bool:
         """Kills a node via CONTROL kill."""
         reply = await self.send_control(node_id, {"action": ControlAction.KILL.value})
@@ -253,74 +282,6 @@ class ClusterSupervisor:
             reply = await self.send_control(target, {"action": ControlAction.START_ELECTION.value})
             return bool(reply and reply.get("status") == "ok")
         return False
-
-    async def scale_nodes(self, target_count: int) -> int:
-        """Scales cluster size between 3 and 9 nodes dynamically (FR-26 to FR-30)."""
-        target_count = max(3, min(9, target_count))
-        current_count = len(self.processes)
-        if target_count == current_count:
-            return current_count
-
-        logger.info(f"Scaling cluster from {current_count} to {target_count} nodes...")
-
-        if target_count > current_count:
-            # Scale UP: spawn new nodes with next IDs
-            new_ids = list(range(current_count + 1, target_count + 1))
-            # Update all ports
-            for nid in new_ids:
-                self.node_ports[nid] = self._get_port_for_id(nid)
-
-            peers_dict = self.build_peers_dict()
-            peers_json = json.dumps({str(k): v for k, v in peers_dict.items()})
-
-            # Spawn new processes
-            for nid in new_ids:
-                self._spawn_node_process(nid, peers_json)
-
-            await asyncio.sleep(0.5)
-
-            # Broadcast new membership to existing nodes
-            await self.broadcast_control({
-                "action": ControlAction.MEMBERSHIP.value,
-                "peers": {str(k): v for k, v in peers_dict.items()},
-            })
-
-            # If Bully mode and new highest ID joined:
-            if self.current_algorithm == AlgorithmType.BULLY:
-                highest_new = max(new_ids)
-                await self.trigger_election(highest_new)
-
-        else:
-            # Scale DOWN: remove highest IDs first (FR-28)
-            remove_ids = sorted(list(self.processes.keys()), reverse=True)[: (current_count - target_count)]
-            leader_removed = any(nid == self.current_leader for nid in remove_ids)
-
-            for nid in remove_ids:
-                # Graceful stop
-                proc = self.processes.pop(nid, None)
-                if proc:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=1.0)
-                    except Exception:
-                        proc.kill()
-                self.node_ports.pop(nid, None)
-                self.node_cache.pop(nid, None)
-
-            # Update remaining nodes
-            remaining_peers = self.build_peers_dict()
-            await self.broadcast_control({
-                "action": ControlAction.MEMBERSHIP.value,
-                "peers": {str(k): v for k, v in remaining_peers.items()},
-            })
-
-            # If leader was removed, trigger election among remaining
-            if leader_removed:
-                self.current_leader = None
-                await self.trigger_election()
-
-        self.node_count = len(self.processes)
-        return self.node_count
 
     # -------------------------------------------------------------------------
     # Chaos Mode

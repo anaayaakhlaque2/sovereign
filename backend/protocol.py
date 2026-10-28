@@ -95,6 +95,21 @@ class Message(BaseModel):
     ts: float = Field(default_factory=time.time)
     delivered: bool = True
 
+    @property
+    def payload_leader(self) -> Optional[int]:
+        val = self.payload.get("leader")
+        return int(val) if val is not None else None
+
+    @property
+    def payload_initiator(self) -> Optional[int]:
+        val = self.payload.get("initiator")
+        return int(val) if val is not None else None
+
+    @property
+    def payload_ids(self) -> List[int]:
+        raw = self.payload.get("ids", self.payload.get("alive", []))
+        return [int(x) for x in raw]
+
     def to_json(self) -> str:
         """Serialize as a single line JSON string terminated by newline."""
         return self.model_dump_json(by_alias=True) + "\n"

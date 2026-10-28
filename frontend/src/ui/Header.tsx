@@ -6,6 +6,7 @@ import { ActiveTabType, AlgorithmType, CameraMode } from '../lib/types';
 export function Header() {
   const nodes = useClusterStore((s) => s.nodes);
   const leader = useClusterStore((s) => s.leader);
+  const agreed = useClusterStore((s) => s.agreed);
   const algorithm = useClusterStore((s) => s.algorithm);
   const setStoreAlgorithm = useClusterStore((s) => s.setAlgorithm);
   const connected = useClusterStore((s) => s.connected);
@@ -21,7 +22,7 @@ export function Header() {
 
   const leaderNode = nodes.find((n) => n.id === leader);
   const isLeaderAlive = leaderNode && leaderNode.status !== 'DEAD';
-  const effectiveLeader = isLeaderAlive ? leader : null;
+  const effectiveLeader = (agreed && isLeaderAlive) ? leader : null;
 
   const handleAlgorithmChange = async (algo: AlgorithmType) => {
     // 1. Instantly update store for immediate UI response
@@ -62,7 +63,7 @@ export function Header() {
           <div className={`w-2.5 h-2.5 rounded-full ${effectiveLeader ? 'bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]' : 'bg-red-500 animate-ping'}`} />
           <span className="text-xs uppercase tracking-wider text-slate-600 dark:text-[var(--mute)] font-medium">Sovereign:</span>
           <span className="font-cinzel font-bold text-sm text-amber-800 dark:text-[var(--gold)]">
-            {effectiveLeader ? `Node ${effectiveLeader}` : 'Crown Vacant (Electing...)'}
+            {effectiveLeader ? `Node ${effectiveLeader}` : 'Electing...'}
           </span>
         </div>
 

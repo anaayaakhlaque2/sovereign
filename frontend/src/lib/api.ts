@@ -31,15 +31,6 @@ export async function setAlgorithm(algorithm: AlgorithmType) {
   return res.json();
 }
 
-export async function scaleNodes(count: number) {
-  const res = await fetch(`${API_BASE}/cluster/scale`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ count }),
-  });
-  return res.json();
-}
-
 export async function setNetwork(delay: number, dropRate: number) {
   const res = await fetch(`${API_BASE}/cluster/network`, {
     method: 'POST',

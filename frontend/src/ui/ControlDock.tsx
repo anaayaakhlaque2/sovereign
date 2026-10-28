@@ -3,14 +3,12 @@ import { Skull, Vote, Zap, Sliders, Play, RotateCcw } from 'lucide-react';
 import { useClusterStore } from '../store/clusterStore';
 import {
   assassinateLeader,
-  scaleNodes as apiScaleNodes,
   setNetwork as apiSetNetwork,
   toggleChaos as apiToggleChaos,
   triggerElection,
 } from '../lib/api';
 
 export function ControlDock() {
-  const nodeCount = useClusterStore((s) => s.nodeCount);
   const chaos = useClusterStore((s) => s.chaos);
   const delay = useClusterStore((s) => s.delay);
   const dropRate = useClusterStore((s) => s.dropRate);
@@ -40,14 +38,6 @@ export function ControlDock() {
   const handleChaosToggle = async () => {
     try {
       await apiToggleChaos(!chaos);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleScaleChange = async (newCount: number) => {
-    try {
-      await apiScaleNodes(newCount);
     } catch (e) {
       console.error(e);
     }
@@ -136,25 +126,6 @@ export function ControlDock() {
           <Zap className="w-4 h-4 text-[#c77dff]" />
           <span>Chaos: {chaos ? 'ON' : 'OFF'}</span>
         </button>
-
-        <div className="h-6 w-px bg-slate-300 dark:bg-white/15" />
-
-        {/* Node Count Slider (3 to 9) */}
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-700 dark:text-[var(--mute)] font-semibold">Nodes:</span>
-          <input
-            type="range"
-            min="3"
-            max="9"
-            step="1"
-            value={nodeCount}
-            onChange={(e) => handleScaleChange(Number(e.target.value))}
-            className="w-24 accent-[#e8c36a] cursor-pointer"
-          />
-          <span className="font-cinzel font-bold text-base text-amber-800 dark:text-[var(--gold)] w-5 text-center">
-            {nodeCount}
-          </span>
-        </div>
 
         <div className="h-6 w-px bg-slate-300 dark:bg-white/15" />
 

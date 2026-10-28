@@ -4,6 +4,7 @@ import { ActiveTabType, AlgorithmType, CameraMode, ElectionRecord, LogEntry, Nod
 interface ClusterState {
   nodes: NodeState[];
   leader: number | null;
+  agreed: boolean;
   algorithm: AlgorithmType;
   nodeCount: number;
   chaos: boolean;
@@ -59,6 +60,7 @@ const MESSAGE_COLORS: Record<string, string> = {
 export const useClusterStore = create<ClusterState>((set, get) => ({
   nodes: [],
   leader: null,
+  agreed: true,
   algorithm: 'bully',
   nodeCount: 5,
   chaos: false,
@@ -82,14 +84,13 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 
   updateSnapshot: (data) => {
     const rawNodes: NodeState[] = data.nodes || [];
-    let safeLeader = data.leader || null;
-    const lNode = rawNodes.find((n) => n.id === safeLeader);
-    if (lNode && lNode.status === 'DEAD') {
-      safeLeader = null;
-    }
+    const agreed = !!data.agreed;
+    // Rule R1 & Step 4: Leader comes strictly from majority snapshot, or null if electing/disagreed
+    const leaderId = agreed && data.leader_id !== undefined && data.leader_id !== null ? data.leader_id : null;
     set({
       nodes: rawNodes,
-      leader: safeLeader,
+      leader: leaderId,
+      agreed: agreed,
       algorithm: data.algorithm || 'bully',
       nodeCount: data.node_count || 5,
       chaos: !!data.chaos,
@@ -110,37 +111,24 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   },
 
   handleEvent: (evt) => {
-    const { event_type, node_id, data, lamport, ts, leader } = evt;
+    // Single source of truth: sync snapshot if attached
+    if (evt.snapshot) {
+      get().updateSnapshot(evt.snapshot);
+    }
+    const { event_type, node_id, data, lamport, ts } = evt;
     const timeStr = new Date(ts * 1000).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + Math.floor((ts % 1) * 1000).toString().padStart(3, '0');
 
     if (event_type === 'STATE_CHANGED' || event_type === 'LEADER_ELECTED') {
       const status: NodeStatusType = data.status;
       const leaderId = data.leader_id;
 
-      set((state) => {
-        const nextNodes = state.nodes.map((n) =>
+      set((state) => ({
+        nodes: state.nodes.map((n) =>
           n.id === node_id
             ? { ...n, status: status || n.status, leader_id: leaderId !== undefined ? leaderId : n.leader_id }
             : n
-        );
-
-        let nextLeader = leader !== undefined ? leader : state.leader;
-        // If current leader died, clear leader immediately!
-        if (status === 'DEAD' && (state.leader === node_id || leaderId === null)) {
-          nextLeader = null;
-        }
-
-        // Strict invariant: leader can NEVER be a DEAD node!
-        const candLeaderNode = nextNodes.find((n) => n.id === nextLeader);
-        if (candLeaderNode && candLeaderNode.status === 'DEAD') {
-          nextLeader = null;
-        }
-
-        return {
-          nodes: nextNodes,
-          leader: nextLeader,
-        };
-      });
+        ),
+      }));
 
       const entry: LogEntry = {
         id: `${ts}-${Math.random()}`,

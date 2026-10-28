@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from rich.console import Console
 from rich.logging import RichHandler
 
+from backend.config import NODE_COUNT, get_node_ports
 from backend.node.bully import BullyElection
 from backend.node.heartbeat import HeartbeatDetector
 from backend.node.ring import RingElection
@@ -54,6 +55,7 @@ class Node:
         heartbeat_timeout: float = 2.2,
         ok_timeout: float = 1.0,
         coordinator_timeout: float = 3.0,
+        ring_token_timeout: Optional[float] = None,
     ) -> None:
         self.node_id = node_id
         self.port = port
@@ -90,6 +92,7 @@ class Node:
             send_message_to_node=self._send_to_node_id,
             on_state_change=self._on_state_change,
             get_lamport=lambda: self.clock.value,
+            token_timeout=ring_token_timeout,
         )
         self.heartbeat = HeartbeatDetector(
             node_id=self.node_id,
@@ -124,6 +127,8 @@ class Node:
         logger.info(f"[bold green]Node {self.node_id}[/] listening on port {self.port} (Algo: {self.algorithm.value})")
         self.heartbeat.start()
         await self._send_event("STATE_CHANGED", {"status": self.status.value, "leader_id": self.leader_id})
+        # Suspect j: on start, query peers to discover if a leader is already established
+        asyncio.create_task(self._query_peer_for_leader())
 
     async def stop(self) -> None:
         """Stops the node cleanly."""
@@ -170,7 +175,7 @@ class Node:
                     await writer.drain()
 
                     msg = Message.model_validate(data)
-                    await self._process_incoming_message(msg)
+                    asyncio.create_task(self._process_incoming_message(msg))
                 except Exception as ex:
                     logger.warning(f"Node {self.node_id}: Malformed message: {ex}")
         except Exception as e:
@@ -256,15 +261,6 @@ class Node:
             logger.warning(f"Node {self.node_id}: Unknown target node {target_id}")
             return False
 
-        # Apply network drop
-        if self.drop_rate > 0.0 and random.random() < self.drop_rate:
-            logger.warning(f"Node {self.node_id}: Dropped outgoing {msg.type} to {target_id}")
-            return False
-
-        # Apply network delay
-        if self.network_delay > 0.0:
-            await asyncio.sleep(self.network_delay)
-
         target_port = self.peers[target_id]
         msg.lamport = self.clock.tick()
         raw = msg.to_json()
@@ -277,19 +273,41 @@ class Node:
             MessageType.RING_COORDINATOR,
         )
 
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection("127.0.0.1", target_port),
-                timeout=1.0,
-            )
-            writer.write(raw.encode("utf-8"))
-            await writer.drain()
+        # Retry under lossy fault injection (suspect k)
+        max_attempts = 3 if (self.drop_rate > 0.0 and is_election_msg) else 1
+        for attempt in range(max_attempts):
+            if attempt > 0:
+                await asyncio.sleep(0.05)
 
-            # Wait for socket-level ACK from peer to confirm node is alive
-            ack_raw = await asyncio.wait_for(reader.readline(), timeout=0.5)
-            if not ack_raw:
-                writer.close()
-                await writer.wait_closed()
+            # Apply network drop
+            if self.drop_rate > 0.0 and random.random() < self.drop_rate:
+                logger.warning(f"Node {self.node_id}: Dropped outgoing {msg.type} to {target_id} (attempt {attempt + 1})")
+                if attempt == max_attempts - 1:
+                    if is_election_msg:
+                        self.sent_messages.append({
+                            "from": self.node_id,
+                            "to": target_id,
+                            "type": msg.type.value,
+                            "election_id": msg.election_id,
+                            "algorithm": msg.algorithm.value,
+                            "payload": msg.payload,
+                            "delivered": False,
+                        })
+                    return False
+                continue
+
+            # Apply network delay
+            if self.network_delay > 0.0:
+                await asyncio.sleep(self.network_delay)
+
+            try:
+                # Step 1: Connect
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection("127.0.0.1", target_port),
+                    timeout=1.0,
+                )
+            except (ConnectionRefusedError, OSError) as err:
+                logger.warning(f"Node {self.node_id}: Connect failed to {target_id} (port {target_port}): {err}")
                 if is_election_msg:
                     self.sent_messages.append({
                         "from": self.node_id,
@@ -300,7 +318,64 @@ class Node:
                         "payload": msg.payload,
                         "delivered": False,
                     })
-                    await self._send_event("MESSAGE_SENT", {
+                return False
+
+            try:
+                # Step 2: Write
+                writer.write(raw.encode("utf-8"))
+                await writer.drain()
+
+                # Step 3: Read ACK
+                ack_raw = await asyncio.wait_for(reader.readline(), timeout=0.5)
+                if not ack_raw:
+                    writer.close()
+                    await writer.wait_closed()
+                    if is_election_msg:
+                        self.sent_messages.append({
+                            "from": self.node_id,
+                            "to": target_id,
+                            "type": msg.type.value,
+                            "election_id": msg.election_id,
+                            "algorithm": msg.algorithm.value,
+                            "payload": msg.payload,
+                            "delivered": False,
+                        })
+                    return False
+
+                writer.close()
+                await writer.wait_closed()
+
+                if is_election_msg:
+                    self.sent_messages.append({
+                        "from": self.node_id,
+                        "to": target_id,
+                        "type": msg.type.value,
+                        "election_id": msg.election_id,
+                        "algorithm": msg.algorithm.value,
+                        "payload": msg.payload,
+                        "delivered": True,
+                    })
+
+                # Telemetry: delivered successfully
+                await self._send_event("MESSAGE_SENT", {
+                    "from": self.node_id,
+                    "to": target_id,
+                    "type": msg.type.value,
+                    "election_id": msg.election_id,
+                    "algorithm": msg.algorithm.value,
+                    "payload": msg.payload,
+                    "delivered": True,
+                })
+                return True
+            except Exception as err:
+                logger.warning(f"Node {self.node_id}: Write/Read failed to {target_id} (port {target_port}): {err}")
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+                if is_election_msg:
+                    self.sent_messages.append({
                         "from": self.node_id,
                         "to": target_id,
                         "type": msg.type.value,
@@ -310,53 +385,7 @@ class Node:
                         "delivered": False,
                     })
                 return False
-
-            writer.close()
-            await writer.wait_closed()
-
-            if is_election_msg:
-                self.sent_messages.append({
-                    "from": self.node_id,
-                    "to": target_id,
-                    "type": msg.type.value,
-                    "election_id": msg.election_id,
-                    "algorithm": msg.algorithm.value,
-                    "payload": msg.payload,
-                    "delivered": True,
-                })
-
-            # Telemetry: delivered successfully
-            await self._send_event("MESSAGE_SENT", {
-                "from": self.node_id,
-                "to": target_id,
-                "type": msg.type.value,
-                "election_id": msg.election_id,
-                "algorithm": msg.algorithm.value,
-                "payload": msg.payload,
-                "delivered": True,
-            })
-            return True
-        except Exception:
-            if is_election_msg:
-                self.sent_messages.append({
-                    "from": self.node_id,
-                    "to": target_id,
-                    "type": msg.type.value,
-                    "election_id": msg.election_id,
-                    "algorithm": msg.algorithm.value,
-                    "payload": msg.payload,
-                    "delivered": False,
-                })
-                await self._send_event("MESSAGE_SENT", {
-                    "from": self.node_id,
-                    "to": target_id,
-                    "type": msg.type.value,
-                    "election_id": msg.election_id,
-                    "algorithm": msg.algorithm.value,
-                    "payload": msg.payload,
-                    "delivered": False,
-                })
-            return False
+        return False
 
     async def _broadcast_direct(self, msg: Message, target_ids: List[int]) -> None:
         """Broadcasts a message to multiple targets in parallel."""

@@ -11,6 +11,7 @@ import { Environment } from './Environment';
 export function SceneCanvas() {
   const nodes = useClusterStore((s) => s.nodes);
   const leader = useClusterStore((s) => s.leader);
+  const agreed = useClusterStore((s) => s.agreed);
   const algorithm = useClusterStore((s) => s.algorithm);
   const theme = useClusterStore((s) => s.theme);
   const selectedNode = useClusterStore((s) => s.selectedNode);
@@ -26,8 +27,9 @@ export function SceneCanvas() {
 
   const nodePositions = useMemo(() => {
     const map = new Map<number, [number, number, number]>();
-    nodes.forEach((n, idx) => {
-      const angle = (idx / nodeCount) * Math.PI * 2 + Math.PI / 2;
+    nodes.forEach((n) => {
+      // Key position strictly by node.id (not array index - Suspect e)
+      const angle = ((n.id - 1) / nodeCount) * Math.PI * 2 + Math.PI / 2;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
       map.set(n.id, [x, 0, z]);
@@ -35,10 +37,10 @@ export function SceneCanvas() {
     return map;
   }, [nodes, nodeCount, radius]);
 
-  // Effective leader: a leader MUST exist and be strictly ALIVE!
+  // Effective leader: agreed from gateway snapshot and strictly alive
   const leaderNode = nodes.find((n) => n.id === leader);
   const isLeaderAlive = leaderNode && leaderNode.status !== 'DEAD';
-  const effectiveLeader = isLeaderAlive ? leader : null;
+  const effectiveLeader = (agreed && isLeaderAlive) ? leader : null;
   const leaderPosition = effectiveLeader ? nodePositions.get(effectiveLeader) || null : null;
 
   return (

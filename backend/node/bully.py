@@ -128,7 +128,7 @@ class BullyElection:
 
     async def handle_election_message(self, msg: Message) -> None:
         """Handle incoming ELECTION message."""
-        sender = msg.from_node
+        sender = int(msg.from_node)
 
         # Rule 2: A node receiving ELECTION from a lower id replies OK immediately,
         # then starts its own election (only once per election_id).
@@ -164,7 +164,8 @@ class BullyElection:
 
     async def handle_coordinator_message(self, msg: Message) -> None:
         """Handle incoming COORDINATOR message."""
-        new_leader = msg.payload.get("leader", msg.from_node)
+        raw_leader = msg.payload.get("leader", msg.from_node)
+        new_leader = int(raw_leader) if raw_leader is not None else int(msg.from_node)
 
         # Rule 5: A node receiving COORDINATOR from a lower id than itself must reject it
         # and start its own election (a higher node has returned).

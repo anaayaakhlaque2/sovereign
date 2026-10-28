@@ -26,13 +26,13 @@ export function AnalyticsModal() {
   const [benchmarkLoading, setBenchmarkLoading] = useState<boolean>(false);
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
   const [chartData, setChartData] = useState<any[]>([
-    { name: 'N=3', Bully: 5, Ring: 4, BullyWorst: 5, RingWorst: 4 },
-    { name: 'N=4', Bully: 8, Ring: 6, BullyWorst: 9, RingWorst: 6 },
-    { name: 'N=5', Bully: 12, Ring: 8, BullyWorst: 14, RingWorst: 8 },
-    { name: 'N=6', Bully: 16, Ring: 10, BullyWorst: 20, RingWorst: 10 },
-    { name: 'N=7', Bully: 22, Ring: 12, BullyWorst: 27, RingWorst: 12 },
-    { name: 'N=8', Bully: 28, Ring: 14, BullyWorst: 35, RingWorst: 14 },
-    { name: 'N=9', Bully: 35, Ring: 16, BullyWorst: 44, RingWorst: 16 },
+    { name: 'N=3 (Theoretical)', BullyWorst: 3, Ring: 4 },
+    { name: 'N=4 (Theoretical)', BullyWorst: 8, Ring: 6 },
+    { name: 'N=5 (Empirical N=5)', BullyWorst: 15, Ring: 8 },
+    { name: 'N=6 (Theoretical)', BullyWorst: 24, Ring: 10 },
+    { name: 'N=7 (Theoretical)', BullyWorst: 35, Ring: 12 },
+    { name: 'N=8 (Theoretical)', BullyWorst: 48, Ring: 14 },
+    { name: 'N=9 (Theoretical)', BullyWorst: 63, Ring: 16 },
   ]);
 
   useEffect(() => {
@@ -53,23 +53,14 @@ export function AnalyticsModal() {
   const handleRunBenchmark = async () => {
     setBenchmarkLoading(true);
     try {
-      const res = await runBenchmark(10, [3, 4, 5, 6, 7, 8, 9]);
-      if (res && res.benchmark) {
-        // Group by node_count
-        const formatted: Record<number, any> = {};
-        res.benchmark.forEach((b: any) => {
-          const n = b.node_count;
-          if (!formatted[n]) formatted[n] = { name: `N=${n}` };
-          if (b.algorithm === 'bully') {
-            formatted[n].Bully = b.avg_messages;
-            formatted[n].BullyWorst = b.worst_messages;
-          }
-          if (b.algorithm === 'ring') {
-            formatted[n].Ring = b.avg_messages;
-            formatted[n].RingWorst = b.worst_messages;
-          }
-        });
-        setChartData(Object.values(formatted));
+      const res = await runBenchmark();
+      if (res && res.theoretical_curves) {
+        const formatted = res.theoretical_curves.map((t: any) => ({
+          name: t.node_count === 5 ? 'N=5 (Empirical)' : `N=${t.node_count} (Theoretical)`,
+          BullyWorst: t.bully_messages,
+          Ring: t.ring_messages,
+        }));
+        setChartData(formatted);
       }
       await loadData();
     } catch (e) {

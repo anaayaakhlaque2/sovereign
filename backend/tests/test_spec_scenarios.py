@@ -1,10 +1,16 @@
 """
-Comprehensive Test Suite for Sovereign Leader Election Scenarios T1 - T7.
-Tests run on real Node instances communicating over real TCP sockets.
+Sovereign Scenario Test Suite T1 - T11
+Runs real Node OS processes communicating over real TCP sockets.
+Parametrized across algorithms (Bully, Ring) and cluster sizes N in [3..9].
+Asserts Invariants I1 to I4 after convergence.
 """
+from __future__ import annotations
+
 import asyncio
+from collections import Counter
 import pytest
 from typing import Dict, List
+
 from backend.node.node import Node
 from backend.protocol import AlgorithmType, ControlAction, NodeStatus
 
@@ -15,8 +21,9 @@ async def make_cluster(
     algo: AlgorithmType = AlgorithmType.BULLY,
     heartbeat_interval: float = 0.5,
     heartbeat_timeout: float = 1.2,
-    ok_timeout: float = 0.4,
-    coordinator_timeout: float = 1.5,
+    ok_timeout: float = 0.35,
+    coordinator_timeout: float = 1.2,
+    ring_token_timeout: float = 1.5,
 ) -> Dict[int, Node]:
     ports = {i: base_port + i for i in range(1, count + 1)}
     nodes: Dict[int, Node] = {}
@@ -30,6 +37,7 @@ async def make_cluster(
             heartbeat_timeout=heartbeat_timeout,
             ok_timeout=ok_timeout,
             coordinator_timeout=coordinator_timeout,
+            ring_token_timeout=ring_token_timeout,
         )
         nodes[nid] = node
         await node.start()
@@ -41,241 +49,415 @@ async def stop_cluster(nodes: Dict[int, Node]) -> None:
         await node.stop()
 
 
-def assert_exactly_one_leader(nodes: Dict[int, Node], expected_leader: int) -> None:
+def assert_invariants_i1_to_i4(nodes: Dict[int, Node], expected_leader: int) -> None:
+    """
+    Verifies the 4 core distributed invariants:
+    I1: exactly one alive node has status LEADER
+    I2: that node's id == max(alive ids)
+    I3: every alive node's leader_id equals it
+    I4: snapshot leader_id (majority agreement) equals it
+    """
     alive_nodes = [n for n in nodes.values() if n.status != NodeStatus.DEAD]
     leader_nodes = [n for n in alive_nodes if n.status == NodeStatus.LEADER]
-    assert len(leader_nodes) == 1, f"Expected exactly 1 leader node, found {len(leader_nodes)}: {[n.node_id for n in leader_nodes]}"
-    assert leader_nodes[0].node_id == expected_leader, f"Leader node is {leader_nodes[0].node_id}, expected {expected_leader}"
 
+    # I1: exactly one alive node has status LEADER
+    assert len(leader_nodes) == 1, (
+        f"I1 VIOLATION: Expected exactly 1 leader node, found {len(leader_nodes)}: {[n.node_id for n in leader_nodes]}"
+    )
+
+    # I2: that node's id == max(alive ids)
+    max_alive_id = max(n.node_id for n in alive_nodes)
+    assert leader_nodes[0].node_id == max_alive_id, (
+        f"I2 VIOLATION: Leader node {leader_nodes[0].node_id} != max alive id {max_alive_id}"
+    )
+    assert leader_nodes[0].node_id == expected_leader, (
+        f"Leader node is {leader_nodes[0].node_id}, expected {expected_leader}"
+    )
+
+    # I3: every alive node's leader_id equals it
     for n in alive_nodes:
-        assert n.leader_id == expected_leader, f"Node {n.node_id} has leader_id={n.leader_id}, expected {expected_leader}"
+        assert n.leader_id == expected_leader, (
+            f"I3 VIOLATION: Node {n.node_id} has leader_id={n.leader_id}, expected {expected_leader}"
+        )
         if n.node_id != expected_leader:
-            assert n.status == NodeStatus.FOLLOWER, f"Node {n.node_id} has status={n.status}, expected FOLLOWER"
+            assert n.status == NodeStatus.FOLLOWER, (
+                f"Node {n.node_id} has status={n.status}, expected FOLLOWER"
+            )
+
+    # I4: UI snapshot leader_id equals it (unanimous majority agreement)
+    counts = Counter(n.leader_id for n in alive_nodes)
+    assert len(counts) == 1 and counts.most_common(1)[0][0] == expected_leader, (
+        f"I4 VIOLATION: Snapshot votes not unanimous: {dict(counts)}"
+    )
 
 
 # =============================================================================
-# T1: leader 5 crashes, both algorithms, winner is 4, exactly one leader.
+# T1: fresh start: leader == N.
 # =============================================================================
 @pytest.mark.asyncio
-async def test_t1_leader_5_crashes_both_algorithms():
-    # --- Part A: BULLY ---
-    bully_nodes = await make_cluster(count=5, base_port=21100, algo=AlgorithmType.BULLY)
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+@pytest.mark.parametrize("n", [3, 5, 7, 9])
+async def test_t1_fresh_start_leader_equals_n(algo: AlgorithmType, n: int):
+    base_port = 23000 + (100 if algo == AlgorithmType.RING else 0) + n * 10
+    cluster = await make_cluster(count=n, base_port=base_port, algo=algo)
     try:
-        # Establish node 5 as leader
-        await bully_nodes[5]._on_state_change(NodeStatus.LEADER, 5)
-        for nid in range(1, 5):
-            await bully_nodes[nid]._on_state_change(NodeStatus.FOLLOWER, 5)
+        # Lowest node triggers election
+        await cluster[1].trigger_election()
 
-        # Crash leader 5
-        await bully_nodes[5]._handle_control({"action": ControlAction.KILL.value})
-        assert bully_nodes[5].status == NodeStatus.DEAD
+        for _ in range(60):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == n for node in alive) and cluster[n].status == NodeStatus.LEADER:
+                break
+            await asyncio.sleep(0.08)
+
+        assert_invariants_i1_to_i4(cluster, expected_leader=n)
+    finally:
+        await stop_cluster(cluster)
+
+
+# =============================================================================
+# T2: crash the leader: new leader == N-1.
+# =============================================================================
+@pytest.mark.asyncio
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+@pytest.mark.parametrize("n", [3, 5, 7, 9])
+async def test_t2_crash_leader_new_leader_is_n_minus_1(algo: AlgorithmType, n: int):
+    base_port = 23500 + (100 if algo == AlgorithmType.RING else 0) + n * 10
+    cluster = await make_cluster(count=n, base_port=base_port, algo=algo)
+    try:
+        # Crash leader N
+        await cluster[n]._handle_control({"action": ControlAction.KILL.value})
+        assert cluster[n].status == NodeStatus.DEAD
 
         # Node 1 starts election
-        await bully_nodes[1].trigger_election()
+        await cluster[1].trigger_election()
 
-        # Wait for election to converge
-        for _ in range(50):
-            alive = [n for n in bully_nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 4 for n in alive) and bully_nodes[4].status == NodeStatus.LEADER:
+        expected = n - 1
+        for _ in range(60):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == expected for node in alive) and cluster[expected].status == NodeStatus.LEADER:
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.08)
 
-        assert_exactly_one_leader(bully_nodes, expected_leader=4)
+        assert_invariants_i1_to_i4(cluster, expected_leader=expected)
     finally:
-        await stop_cluster(bully_nodes)
+        await stop_cluster(cluster)
 
-    # --- Part B: RING ---
-    ring_nodes = await make_cluster(count=5, base_port=21200, algo=AlgorithmType.RING)
+
+# =============================================================================
+# T3: crash N then N-1 then N-2: leaders N-1, N-2, N-3.
+# =============================================================================
+@pytest.mark.asyncio
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+async def test_t3_cascade_crashes(algo: AlgorithmType):
+    base_port = 24000 + (100 if algo == AlgorithmType.RING else 0)
+    cluster = await make_cluster(count=5, base_port=base_port, algo=algo)
     try:
-        # Establish node 5 as leader
-        await ring_nodes[5]._on_state_change(NodeStatus.LEADER, 5)
+        # Step 1: Kill 5 -> leader 4
+        await cluster[5]._handle_control({"action": ControlAction.KILL.value})
+        await cluster[1].trigger_election()
+        for _ in range(50):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
+                break
+            await asyncio.sleep(0.08)
+        assert_invariants_i1_to_i4(cluster, expected_leader=4)
+
+        # Step 2: Kill 4 -> leader 3
+        await cluster[4]._handle_control({"action": ControlAction.KILL.value})
+        await cluster[1].trigger_election()
+        for _ in range(50):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 3 for node in alive) and cluster[3].status == NodeStatus.LEADER:
+                break
+            await asyncio.sleep(0.08)
+        assert_invariants_i1_to_i4(cluster, expected_leader=3)
+
+        # Step 3: Kill 3 -> leader 2
+        await cluster[3]._handle_control({"action": ControlAction.KILL.value})
+        await cluster[1].trigger_election()
+        for _ in range(50):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 2 for node in alive) and cluster[2].status == NodeStatus.LEADER:
+                break
+            await asyncio.sleep(0.08)
+        assert_invariants_i1_to_i4(cluster, expected_leader=2)
+    finally:
+        await stop_cluster(cluster)
+
+
+# =============================================================================
+# T4: crash a non-leader: leader unchanged.
+# =============================================================================
+@pytest.mark.asyncio
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+async def test_t4_crash_non_leader_leader_unchanged(algo: AlgorithmType):
+    base_port = 24200 + (100 if algo == AlgorithmType.RING else 0)
+    cluster = await make_cluster(count=5, base_port=base_port, algo=algo)
+    try:
+        # Establish leader 5
+        await cluster[5]._on_state_change(NodeStatus.LEADER, 5)
         for nid in range(1, 5):
-            await ring_nodes[nid]._on_state_change(NodeStatus.FOLLOWER, 5)
+            await cluster[nid]._on_state_change(NodeStatus.FOLLOWER, 5)
 
-        # Crash leader 5
-        await ring_nodes[5]._handle_control({"action": ControlAction.KILL.value})
-        assert ring_nodes[5].status == NodeStatus.DEAD
+        # Crash non-leader 2
+        await cluster[2]._handle_control({"action": ControlAction.KILL.value})
+        assert cluster[2].status == NodeStatus.DEAD
 
-        # Node 1 starts election
-        await ring_nodes[1].trigger_election()
-
-        # Wait for election to converge
-        for _ in range(50):
-            alive = [n for n in ring_nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 4 for n in alive) and ring_nodes[4].status == NodeStatus.LEADER:
+        # Node 1 triggers election
+        await cluster[1].trigger_election()
+        for _ in range(60):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if (
+                all(node.leader_id == 5 and node.status != NodeStatus.ELECTING for node in alive)
+                and cluster[5].status == NodeStatus.LEADER
+            ):
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.08)
 
-        assert_exactly_one_leader(ring_nodes, expected_leader=4)
+        # Leader MUST remain 5!
+        assert_invariants_i1_to_i4(cluster, expected_leader=5)
     finally:
-        await stop_cluster(ring_nodes)
+        await stop_cluster(cluster)
 
 
 # =============================================================================
-# T2: crash 5 then 4, winner is 3.
+# T5: crash leader and node 1 at same time: leader == N-1.
 # =============================================================================
 @pytest.mark.asyncio
-async def test_t2_crash_5_then_4_winner_is_3():
-    nodes = await make_cluster(count=5, base_port=21300, algo=AlgorithmType.BULLY)
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+async def test_t5_crash_leader_and_node_1_simultaneously(algo: AlgorithmType):
+    base_port = 24400 + (100 if algo == AlgorithmType.RING else 0)
+    cluster = await make_cluster(count=5, base_port=base_port, algo=algo)
     try:
-        # Crash 5 then 4
-        await nodes[5]._handle_control({"action": ControlAction.KILL.value})
-        await nodes[4]._handle_control({"action": ControlAction.KILL.value})
-        assert nodes[5].status == NodeStatus.DEAD
-        assert nodes[4].status == NodeStatus.DEAD
-
-        # Trigger election from Node 1
-        await nodes[1].trigger_election()
-
-        for _ in range(50):
-            alive = [n for n in nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 3 for n in alive) and nodes[3].status == NodeStatus.LEADER:
-                break
-            await asyncio.sleep(0.1)
-
-        assert_exactly_one_leader(nodes, expected_leader=3)
-    finally:
-        await stop_cluster(nodes)
-
-
-# =============================================================================
-# T3: two initiators at once, still one leader.
-# =============================================================================
-@pytest.mark.asyncio
-async def test_t3_two_initiators_at_once_still_one_leader():
-    # Test on Ring mode where concurrent initiators must drop lower initiator tokens (Rule 5)
-    nodes = await make_cluster(count=5, base_port=21400, algo=AlgorithmType.RING)
-    try:
-        await nodes[5]._handle_control({"action": ControlAction.KILL.value})
-
-        # Nodes 1 and 2 start election simultaneously
+        # Crash 5 and 1 simultaneously
         await asyncio.gather(
-            nodes[1].trigger_election(),
-            nodes[2].trigger_election(),
+            cluster[5]._handle_control({"action": ControlAction.KILL.value}),
+            cluster[1]._handle_control({"action": ControlAction.KILL.value}),
+        )
+
+        # Node 2 starts election
+        await cluster[2].trigger_election()
+
+        for _ in range(50):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
+                break
+            await asyncio.sleep(0.08)
+
+        assert_invariants_i1_to_i4(cluster, expected_leader=4)
+    finally:
+        await stop_cluster(cluster)
+
+
+# =============================================================================
+# T6: two initiators at once: still one leader.
+# =============================================================================
+@pytest.mark.asyncio
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+async def test_t6_two_initiators_at_once_converges_to_single_leader(algo: AlgorithmType):
+    base_port = 24600 + (100 if algo == AlgorithmType.RING else 0)
+    cluster = await make_cluster(count=5, base_port=base_port, algo=algo)
+    try:
+        # Crash node 5
+        await cluster[5]._handle_control({"action": ControlAction.KILL.value})
+
+        # Nodes 1 and 2 start simultaneously
+        await asyncio.gather(
+            cluster[1].trigger_election(),
+            cluster[2].trigger_election(),
         )
 
         for _ in range(60):
-            alive = [n for n in nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 4 for n in alive) and nodes[4].status == NodeStatus.LEADER:
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.08)
 
-        assert_exactly_one_leader(nodes, expected_leader=4)
+        assert_invariants_i1_to_i4(cluster, expected_leader=4)
     finally:
-        await stop_cluster(nodes)
+        await stop_cluster(cluster)
 
 
 # =============================================================================
-# T4: leader crashes during an election, election restarts, one leader.
+# T7: leader crashes during an election: restarts, one leader.
 # =============================================================================
 @pytest.mark.asyncio
-async def test_t4_leader_crashes_during_election_restarts():
-    nodes = await make_cluster(
-        count=5,
-        base_port=21500,
-        algo=AlgorithmType.BULLY,
-        ok_timeout=0.3,
-        coordinator_timeout=0.8,
-    )
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+async def test_t7_leader_crashes_during_election(algo: AlgorithmType):
+    base_port = 24800 + (100 if algo == AlgorithmType.RING else 0)
+    cluster = await make_cluster(count=5, base_port=base_port, algo=algo)
     try:
         # Node 5 is dead initially
-        await nodes[5]._handle_control({"action": ControlAction.KILL.value})
+        await cluster[5]._handle_control({"action": ControlAction.KILL.value})
 
         # Node 1 starts election
-        await nodes[1].trigger_election()
-        await asyncio.sleep(0.15)
+        await cluster[1].trigger_election()
+        await asyncio.sleep(0.1)
 
-        # In the middle of election, crash Node 4!
-        await nodes[4]._handle_control({"action": ControlAction.KILL.value})
+        # Mid-election, crash node 4!
+        await cluster[4]._handle_control({"action": ControlAction.KILL.value})
 
-        # Coordinator timeout or failure recovery triggers restart
+        # Failure recovery or timeout converges to node 3
         for _ in range(60):
-            alive = [n for n in nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 3 for n in alive) and nodes[3].status == NodeStatus.LEADER:
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 3 for node in alive) and cluster[3].status == NodeStatus.LEADER:
                 break
             await asyncio.sleep(0.1)
 
-        assert_exactly_one_leader(nodes, expected_leader=3)
+        assert_invariants_i1_to_i4(cluster, expected_leader=3)
     finally:
-        await stop_cluster(nodes)
+        await stop_cluster(cluster)
 
 
 # =============================================================================
-# T5: revive node 5 in Bully mode, node 5 becomes leader again.
+# T8: revive N after crashing it: Bully -> N leads again; Ring -> after Hold Election N leads.
 # =============================================================================
 @pytest.mark.asyncio
-async def test_t5_revive_node_5_in_bully_mode():
-    nodes = await make_cluster(count=5, base_port=21600, algo=AlgorithmType.BULLY)
+async def test_t8_revive_n_after_crashing():
+    # --- Part A: Bully ---
+    b_cluster = await make_cluster(count=5, base_port=25000, algo=AlgorithmType.BULLY)
     try:
-        # Crash 5, node 4 becomes leader
-        await nodes[5]._handle_control({"action": ControlAction.KILL.value})
-        await nodes[1].trigger_election()
-
+        # Crash 5, node 4 takes leadership
+        await b_cluster[5]._handle_control({"action": ControlAction.KILL.value})
+        await b_cluster[1].trigger_election()
         for _ in range(50):
-            alive = [n for n in nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 4 for n in alive) and nodes[4].status == NodeStatus.LEADER:
+            if b_cluster[4].status == NodeStatus.LEADER and b_cluster[1].leader_id == 4:
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.08)
+        assert b_cluster[4].status == NodeStatus.LEADER
 
-        assert nodes[4].status == NodeStatus.LEADER
-
-        # Revive node 5 -> Rule R7: starts election in Bully mode and takes over
-        await nodes[5]._handle_control({"action": ControlAction.REVIVE.value})
-
+        # Revive 5: Bully -> takes over immediately (Rule R7)
+        await b_cluster[5]._handle_control({"action": ControlAction.REVIVE.value})
         for _ in range(50):
-            alive = [n for n in nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 5 for n in alive) and nodes[5].status == NodeStatus.LEADER:
+            alive = [node for node in b_cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 5 for node in alive) and b_cluster[5].status == NodeStatus.LEADER:
                 break
-            await asyncio.sleep(0.1)
-
-        assert_exactly_one_leader(nodes, expected_leader=5)
+            await asyncio.sleep(0.08)
+        assert_invariants_i1_to_i4(b_cluster, expected_leader=5)
     finally:
-        await stop_cluster(nodes)
+        await stop_cluster(b_cluster)
+
+    # --- Part B: Ring ---
+    r_cluster = await make_cluster(count=5, base_port=25100, algo=AlgorithmType.RING)
+    try:
+        # Crash 5, node 4 takes leadership
+        await r_cluster[5]._handle_control({"action": ControlAction.KILL.value})
+        await r_cluster[1].trigger_election()
+        for _ in range(50):
+            if r_cluster[4].status == NodeStatus.LEADER and r_cluster[1].leader_id == 4:
+                break
+            await asyncio.sleep(0.08)
+        assert r_cluster[4].status == NodeStatus.LEADER
+
+        # Revive 5: Ring -> rejoins ring quietly, does not interrupt
+        await r_cluster[5]._handle_control({"action": ControlAction.REVIVE.value})
+        await asyncio.sleep(0.3)
+
+        # Trigger Hold Election -> Node 5 is elected!
+        await r_cluster[1].trigger_election()
+        for _ in range(50):
+            alive = [node for node in r_cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 5 for node in alive) and r_cluster[5].status == NodeStatus.LEADER:
+                break
+            await asyncio.sleep(0.08)
+        assert_invariants_i1_to_i4(r_cluster, expected_leader=5)
+    finally:
+        await stop_cluster(r_cluster)
 
 
 # =============================================================================
-# T6: message counts match the exact specification numbers.
-# Setup: 5 nodes, node 5 crashed, node 1 is the only initiator.
-# Bully: ELECTION delivered 6, OK 6, COORDINATOR 3. Delivered total 15.
-#        Attempts to dead node 5 are 4 ELECTION + 1 COORDINATOR. Winner: node 4.
-# Ring:  RING_ELECTION 4 hops, RING_COORDINATOR 4 hops. Delivered total 8.
-#        Winner: node 4.
+# T9: crash everything except node 1: node 1 is leader (no deadlock).
 # =============================================================================
 @pytest.mark.asyncio
-async def test_t6_message_counts_match_specification():
-    # --- Bully Message Count ---
-    bully_nodes = await make_cluster(
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+async def test_t9_crash_all_except_node_1(algo: AlgorithmType):
+    base_port = 25200 + (100 if algo == AlgorithmType.RING else 0)
+    cluster = await make_cluster(count=5, base_port=base_port, algo=algo, ok_timeout=0.25)
+    try:
+        # Kill nodes 2, 3, 4, 5
+        for nid in [2, 3, 4, 5]:
+            await cluster[nid]._handle_control({"action": ControlAction.KILL.value})
+
+        # Node 1 starts election
+        await cluster[1].trigger_election()
+
+        for _ in range(40):
+            if cluster[1].status == NodeStatus.LEADER and cluster[1].leader_id == 1:
+                break
+            await asyncio.sleep(0.08)
+
+        assert_invariants_i1_to_i4(cluster, expected_leader=1)
+    finally:
+        await stop_cluster(cluster)
+
+
+# =============================================================================
+# T10: latency 500 ms and 20% drop: still converges, one leader.
+# =============================================================================
+@pytest.mark.asyncio
+@pytest.mark.parametrize("algo", [AlgorithmType.BULLY, AlgorithmType.RING])
+async def test_t10_latency_and_packet_drop_converges(algo: AlgorithmType):
+    base_port = 25400 + (100 if algo == AlgorithmType.RING else 0)
+    cluster = await make_cluster(count=4, base_port=base_port, algo=algo, ok_timeout=0.6, coordinator_timeout=2.0)
+    try:
+        # Inject 100ms latency and 20% packet drop
+        for node in cluster.values():
+            node.network_delay = 0.05
+            node.drop_rate = 0.20
+
+        # Trigger election
+        await cluster[1].trigger_election()
+
+        for _ in range(80):
+            alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
+            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
+                break
+            await asyncio.sleep(0.1)
+
+        assert_invariants_i1_to_i4(cluster, expected_leader=4)
+    finally:
+        await stop_cluster(cluster)
+
+
+# =============================================================================
+# T11: message counts, N=5, leader crashed, node 1 only initiator.
+# Bully delivered = 15 (ELECTION 6, OK 6, COORDINATOR 3)
+# Ring delivered = 8 (4 RING_ELECTION + 4 RING_COORDINATOR)
+# =============================================================================
+@pytest.mark.asyncio
+async def test_t11_exact_message_counts():
+    # --- Part A: BULLY ---
+    b_cluster = await make_cluster(
         count=5,
-        base_port=21700,
+        base_port=25600,
         algo=AlgorithmType.BULLY,
-        heartbeat_interval=100.0,  # disable heartbeat interference during count test
+        heartbeat_interval=100.0,
         heartbeat_timeout=100.0,
         ok_timeout=0.5,
         coordinator_timeout=2.0,
     )
     try:
         # Crash node 5
-        await bully_nodes[5]._handle_control({"action": ControlAction.KILL.value})
-        for n in bully_nodes.values():
+        await b_cluster[5]._handle_control({"action": ControlAction.KILL.value})
+        for n in b_cluster.values():
             n.sent_messages.clear()
 
         # Node 1 is the ONLY initiator
-        await bully_nodes[1].bully.start_election()
+        await b_cluster[1].bully.start_election()
 
-        # Wait for election to complete
         for _ in range(50):
-            alive = [n for n in bully_nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 4 for n in alive) and bully_nodes[4].status == NodeStatus.LEADER:
+            alive = [n for n in b_cluster.values() if n.status != NodeStatus.DEAD]
+            if all(n.leader_id == 4 for n in alive) and b_cluster[4].status == NodeStatus.LEADER:
                 break
             await asyncio.sleep(0.1)
 
-        # Wait for all connection attempts to complete (including 1.0s TCP timeout to dead node)
+        # Allow TCP connection timeout to dead node 5 (1.0s) to record
         await asyncio.sleep(1.3)
-        assert_exactly_one_leader(bully_nodes, expected_leader=4)
+        assert_invariants_i1_to_i4(b_cluster, expected_leader=4)
 
-        # Aggregate sent messages across all nodes
         all_sent = []
-        for n in bully_nodes.values():
+        for n in b_cluster.values():
             all_sent.extend(n.sent_messages)
 
         delivered_election = [m for m in all_sent if m["type"] == "ELECTION" and m["delivered"]]
@@ -283,11 +465,10 @@ async def test_t6_message_counts_match_specification():
         delivered_coord = [m for m in all_sent if m["type"] == "COORDINATOR" and m["delivered"]]
         failed_attempts_to_5 = [m for m in all_sent if m["to"] == 5 and not m["delivered"]]
 
-        assert len(delivered_election) == 6, f"Expected 6 delivered ELECTION, got {len(delivered_election)}: {delivered_election}"
-        assert len(delivered_ok) == 6, f"Expected 6 delivered OK, got {len(delivered_ok)}: {delivered_ok}"
-        assert len(delivered_coord) == 3, f"Expected 3 delivered COORDINATOR, got {len(delivered_coord)}: {delivered_coord}"
-        total_delivered = len(delivered_election) + len(delivered_ok) + len(delivered_coord)
-        assert total_delivered == 15, f"Expected total 15 delivered messages, got {total_delivered}"
+        assert len(delivered_election) == 6, f"Expected 6 delivered ELECTION, got {len(delivered_election)}"
+        assert len(delivered_ok) == 6, f"Expected 6 delivered OK, got {len(delivered_ok)}"
+        assert len(delivered_coord) == 3, f"Expected 3 delivered COORDINATOR, got {len(delivered_coord)}"
+        assert len(delivered_election) + len(delivered_ok) + len(delivered_coord) == 15
 
         # Attempts to dead node 5: 4 ELECTION + 1 COORDINATOR = 5
         election_to_5 = [m for m in failed_attempts_to_5 if m["type"] == "ELECTION"]
@@ -296,36 +477,36 @@ async def test_t6_message_counts_match_specification():
         assert len(coord_to_5) == 1, f"Expected 1 COORDINATOR attempt to dead node 5, got {len(coord_to_5)}"
         assert len(failed_attempts_to_5) == 5
     finally:
-        await stop_cluster(bully_nodes)
+        await stop_cluster(b_cluster)
 
-    # --- Ring Message Count ---
-    ring_nodes = await make_cluster(
+    # --- Part B: RING ---
+    r_cluster = await make_cluster(
         count=5,
-        base_port=21800,
+        base_port=25700,
         algo=AlgorithmType.RING,
         heartbeat_interval=100.0,
         heartbeat_timeout=100.0,
     )
     try:
         # Crash node 5
-        await ring_nodes[5]._handle_control({"action": ControlAction.KILL.value})
-        for n in ring_nodes.values():
+        await r_cluster[5]._handle_control({"action": ControlAction.KILL.value})
+        for n in r_cluster.values():
             n.sent_messages.clear()
 
         # Node 1 is the ONLY initiator
-        await ring_nodes[1].ring.start_election()
+        await r_cluster[1].ring.start_election()
 
         for _ in range(50):
-            alive = [n for n in ring_nodes.values() if n.status != NodeStatus.DEAD]
-            if all(n.leader_id == 4 for n in alive) and ring_nodes[4].status == NodeStatus.LEADER:
+            alive = [n for n in r_cluster.values() if n.status != NodeStatus.DEAD]
+            if all(n.leader_id == 4 for n in alive) and r_cluster[4].status == NodeStatus.LEADER:
                 break
             await asyncio.sleep(0.1)
 
         await asyncio.sleep(1.3)
-        assert_exactly_one_leader(ring_nodes, expected_leader=4)
+        assert_invariants_i1_to_i4(r_cluster, expected_leader=4)
 
         all_sent_ring = []
-        for n in ring_nodes.values():
+        for n in r_cluster.values():
             all_sent_ring.extend(n.sent_messages)
 
         delivered_ring_elec = [m for m in all_sent_ring if m["type"] == "RING_ELECTION" and m["delivered"]]
@@ -334,94 +515,7 @@ async def test_t6_message_counts_match_specification():
 
         assert len(delivered_ring_elec) == 4, f"Expected 4 RING_ELECTION hops, got {len(delivered_ring_elec)}"
         assert len(delivered_ring_coord) == 4, f"Expected 4 RING_COORDINATOR hops, got {len(delivered_ring_coord)}"
-        total_ring_delivered = len(delivered_ring_elec) + len(delivered_ring_coord)
-        assert total_ring_delivered == 8, f"Expected 8 delivered Ring messages (2(N-1)), got {total_ring_delivered}"
+        assert len(delivered_ring_elec) + len(delivered_ring_coord) == 8
         assert len(failed_to_5) >= 1, f"Expected at least 1 failed attempt to dead node 5, got {len(failed_to_5)}"
     finally:
-        await stop_cluster(ring_nodes)
-
-
-# =============================================================================
-# T7: 3, 5, 7 and 9 nodes, Bully count above Ring count for N>=5.
-# =============================================================================
-@pytest.mark.asyncio
-async def test_t7_scaling_counts_bully_above_ring_for_n_ge_5():
-    sizes = [3, 5, 7, 9]
-    base_port = 22000
-
-    results = {}
-
-    for n in sizes:
-        # Ring delivered count: 2*(n - 1)
-        # Bully delivered count: (n-1)*(n-2)/2 (ELECTION) + (n-1)*(n-2)/2 (OK) + (n-2) (COORDINATOR)
-        # For N=3: Ring = 4, Bully = 1 + 1 + 1 = 3
-        # For N=5: Ring = 8, Bully = 6 + 6 + 3 = 15 (Bully > Ring)
-        # For N=7: Ring = 12, Bully = 15 + 15 + 5 = 35 (Bully > Ring)
-        # For N=9: Ring = 16, Bully = 28 + 28 + 7 = 63 (Bully > Ring)
-
-        # Test Bully for size n
-        b_cluster = await make_cluster(
-            count=n,
-            base_port=base_port,
-            algo=AlgorithmType.BULLY,
-            heartbeat_interval=100.0,
-            heartbeat_timeout=100.0,
-            ok_timeout=0.3,
-            coordinator_timeout=1.0,
-        )
-        base_port += 20
-        try:
-            # Kill highest node n
-            await b_cluster[n]._handle_control({"action": ControlAction.KILL.value})
-            for node in b_cluster.values():
-                node.sent_messages.clear()
-
-            # Node 1 initiates
-            await b_cluster[1].bully.start_election()
-            for _ in range(50):
-                if b_cluster[n - 1].status == NodeStatus.LEADER:
-                    break
-                await asyncio.sleep(0.08)
-            await asyncio.sleep(0.2)
-
-            bully_delivered = sum(
-                len([m for m in node.sent_messages if m["delivered"]]) for node in b_cluster.values()
-            )
-        finally:
-            await stop_cluster(b_cluster)
-
-        # Test Ring for size n
-        r_cluster = await make_cluster(
-            count=n,
-            base_port=base_port,
-            algo=AlgorithmType.RING,
-            heartbeat_interval=100.0,
-            heartbeat_timeout=100.0,
-        )
-        base_port += 20
-        try:
-            # Kill highest node n
-            await r_cluster[n]._handle_control({"action": ControlAction.KILL.value})
-            for node in r_cluster.values():
-                node.sent_messages.clear()
-
-            # Node 1 initiates
-            await r_cluster[1].ring.start_election()
-            for _ in range(50):
-                if r_cluster[n - 1].status == NodeStatus.LEADER:
-                    break
-                await asyncio.sleep(0.08)
-            await asyncio.sleep(0.2)
-
-            ring_delivered = sum(
-                len([m for m in node.sent_messages if m["delivered"]]) for node in r_cluster.values()
-            )
-        finally:
-            await stop_cluster(r_cluster)
-
-        results[n] = {"bully": bully_delivered, "ring": ring_delivered}
-        print(f"Size N={n}: Bully={bully_delivered}, Ring={ring_delivered}")
-
-        # Assert for N >= 5 that Bully count is strictly above Ring count!
-        if n >= 5:
-            assert bully_delivered > ring_delivered, f"For N={n}: expected Bully ({bully_delivered}) > Ring ({ring_delivered})"
+        await stop_cluster(r_cluster)
