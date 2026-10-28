@@ -54,9 +54,15 @@ async def lifespan(app: FastAPI):
 
 
 async def _initial_election():
-    await asyncio.sleep(2.0)
-    logger.info("Triggering initial cluster coronation...")
-    await supervisor.trigger_election()
+    """Retries until initial election is triggered and leader crowned on startup."""
+    for attempt in range(8):
+        await asyncio.sleep(1.0 + attempt * 0.5)
+        snap = telemetry.get_cluster_snapshot()
+        if snap.get("agreed") and snap.get("leader_id"):
+            logger.info(f"Cluster initial leader established: Node {snap.get('leader_id')}")
+            return
+        logger.info(f"Triggering initial cluster coronation (attempt {attempt + 1})...")
+        await supervisor.trigger_election()
 
 
 app = FastAPI(
@@ -155,12 +161,14 @@ async def assassinate_leader():
 
 @app.post("/api/cluster/algorithm")
 async def set_algorithm(req: AlgorithmRequest):
-    """Switches active election algorithm across cluster."""
+    """Switches active election algorithm across cluster and automatically triggers election."""
     await supervisor.set_algorithm(req.algorithm)
     await telemetry.broadcast_ws({
         "type": "CONFIG_CHANGED",
         "algorithm": req.algorithm,
     })
+    # Elect every time user switches algorithm per user request
+    await supervisor.trigger_election()
     return {"status": "ok", "algorithm": req.algorithm}
 
 

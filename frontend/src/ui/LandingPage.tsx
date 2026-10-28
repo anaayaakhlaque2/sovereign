@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Crown, Sparkles } from 'lucide-react';
 import { useClusterStore } from '../store/clusterStore';
+import { triggerElection } from '../lib/api';
 
 export function LandingPage() {
   const showLanding = useClusterStore((s) => s.showLanding);
@@ -39,6 +40,11 @@ export function LandingPage() {
       setTheme('day');
       setShowLanding(false);
       setTransitionStage('revealing');
+
+      // Ensure coronation is triggered if no leader is crowned yet
+      if (!useClusterStore.getState().leader) {
+        triggerElection();
+      }
 
       // 3. Gracefully dissolve golden veil into the light 3D kingdom
       setTimeout(() => {

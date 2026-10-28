@@ -1,6 +1,6 @@
 import { Crown, Sun, Moon, Radio, BookOpen } from 'lucide-react';
 import { useClusterStore } from '../store/clusterStore';
-import { setAlgorithm as apiSetAlgorithm } from '../lib/api';
+import { setAlgorithm as apiSetAlgorithm, triggerElection } from '../lib/api';
 import { ActiveTabType, AlgorithmType, CameraMode } from '../lib/types';
 
 export function Header() {
@@ -27,9 +27,10 @@ export function Header() {
   const handleAlgorithmChange = async (algo: AlgorithmType) => {
     // 1. Instantly update store for immediate UI response
     setStoreAlgorithm(algo);
-    // 2. Transmit to backend cluster
+    // 2. Transmit to backend cluster and elect under new algorithm every time
     try {
       await apiSetAlgorithm(algo);
+      await triggerElection();
     } catch (e) {
       console.error('Failed to set algorithm:', e);
     }

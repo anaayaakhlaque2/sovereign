@@ -237,6 +237,11 @@ class TelemetryHub:
         snapshot = self.get_cluster_snapshot()
         await websocket.send_text(json.dumps(snapshot))
 
+        # If cluster has no crowned leader on client connect, trigger election so crown immediately settles on leader!
+        if not snapshot.get("agreed") or snapshot.get("leader_id") is None:
+            logger.info("Client connected to un-crowned cluster. Triggering coronation election...")
+            asyncio.create_task(self.supervisor.trigger_election())
+
     def disconnect_client(self, websocket: WebSocket) -> None:
         self.active_websockets.discard(websocket)
         logger.info(f"WebSocket client disconnected. Total clients: {len(self.active_websockets)}")
