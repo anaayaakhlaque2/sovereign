@@ -1,6 +1,6 @@
 """
 Ring Leader Election Algorithm Implementation
-Implements FR-6, FR-9, and Section 9 specifications.
+Implements Chang-Roberts (1979) collect-list variant according to Sovereign specifications.
 """
 from __future__ import annotations
 
@@ -20,13 +20,13 @@ class RingElection:
         get_peers: Callable[[], Dict[int, int]],  # id -> port
         send_message_to_node: Callable[[int, Message], Coroutine[Any, Any, bool]],
         on_state_change: Callable[[NodeStatus, Optional[int]], Coroutine[Any, Any, None]],
-        election_timeout: float = 3.0,
+        get_lamport: Optional[Callable[[], int]] = None,
     ) -> None:
         self.node_id = node_id
         self.get_peers = get_peers
         self.send_message_to_node = send_message_to_node
         self.on_state_change = on_state_change
-        self.election_timeout = election_timeout
+        self.get_lamport = get_lamport
 
         self.current_election_id: Optional[str] = None
         self.current_initiator_id: Optional[int] = None
@@ -47,33 +47,18 @@ class RingElection:
         self.current_election_id = None
         self.current_initiator_id = None
 
-    async def _wait_election_timeout(self) -> None:
-        try:
-            await asyncio.sleep(self.election_timeout)
-            if self._active:
-                logger.warning(
-                    f"Node {self.node_id}: Ring election {self.current_election_id} timed out. Resetting active state."
-                )
-                self._active = False
-                self.current_election_id = None
-                self.current_initiator_id = None
-        except asyncio.CancelledError:
-            pass
-
     def get_ring_successors(self) -> List[int]:
-        """Returns the circular ordered list of successors for this node."""
+        """Returns the circular ordered list of successors for this node (ascending, wrapping)."""
         peers = self.get_peers()
         all_ids = sorted(list(peers.keys()))
         if not all_ids or all_ids == [self.node_id]:
             return []
 
-        # Find index of self
         if self.node_id in all_ids:
             idx = all_ids.index(self.node_id)
             # Successors in ring order: after self, wrapping around before self
-            return all_ids[idx + 1 :] + all_ids[:idx]
-        else:
-            return all_ids
+            return all_ids[idx + 1:] + all_ids[:idx]
+        return all_ids
 
     async def forward_around_ring(self, msg: Message) -> bool:
         """Attempts to send message to the next alive neighbor, skipping dead ones."""
@@ -94,22 +79,37 @@ class RingElection:
         logger.error(f"Node {self.node_id}: All ring successors unreachable!")
         return False
 
+    async def _wait_election_timeout(self, timeout: float) -> None:
+        try:
+            await asyncio.sleep(timeout)
+            if self._active and self.current_initiator_id == self.node_id:
+                logger.warning(
+                    f"Node {self.node_id}: Ring token timed out after {timeout:.1f}s. Restarting with new election_id."
+                )
+                await self.start_election()
+        except asyncio.CancelledError:
+            pass
+
     async def start_election(self) -> None:
         """Starts a Ring election initiated by this node."""
         self.cancel_timers()
         self._counter += 1
-        election_id = f"ring-{self.node_id}-{self._counter}-{uuid.uuid4().hex[:6]}"
+        lamp = self.get_lamport() if self.get_lamport else self._counter
+        election_id = f"ring-{self.node_id}-{lamp}-{uuid.uuid4().hex[:6]}"
         self.current_election_id = election_id
         self.current_initiator_id = self.node_id
         self._active = True
-        self._timer_task = asyncio.create_task(self._wait_election_timeout())
+
+        peers = self.get_peers()
+        ring_size = len(peers)
+        timeout = 3.0 * ring_size * 0.5
+        self._timer_task = asyncio.create_task(self._wait_election_timeout(timeout))
 
         logger.info(f"Node {self.node_id}: Starting Ring election {election_id}")
         await self.on_state_change(NodeStatus.ELECTING, None)
 
         successors = self.get_ring_successors()
         if not successors:
-            # Only node in cluster -> become leader immediately
             logger.info(f"Node {self.node_id}: Alone in ring. Becoming LEADER!")
             await self.on_state_change(NodeStatus.LEADER, self.node_id)
             self.reset()
@@ -123,12 +123,12 @@ class RingElection:
             algorithm=AlgorithmType.RING,
             payload={
                 "initiator": self.node_id,
+                "ids": [self.node_id],
                 "alive": [self.node_id],
             },
         )
         sent = await self.forward_around_ring(msg)
         if not sent:
-            # If all other nodes are dead, this node is sole survivor and becomes leader
             logger.info(f"Node {self.node_id}: No ring peers responded. Becoming LEADER!")
             await self.on_state_change(NodeStatus.LEADER, self.node_id)
             self.reset()
@@ -137,10 +137,10 @@ class RingElection:
         """Handle incoming RING_ELECTION token."""
         payload = msg.payload
         initiator = payload.get("initiator", msg.from_node)
-        alive_nodes: List[int] = payload.get("alive", [])
+        ids: List[int] = payload.get("ids", payload.get("alive", []))
 
-        # Concurrent election resolution:
-        # If we are already participating in an election with a HIGHER initiator ID, drop this one!
+        # Rule 5: If two initiators start at once, a node that already joined an election
+        # with a HIGHER initiator id drops tokens from a lower initiator.
         if self._active and self.current_initiator_id is not None:
             if initiator < self.current_initiator_id:
                 logger.info(
@@ -152,16 +152,13 @@ class RingElection:
         self.current_initiator_id = initiator
         self._active = True
 
-        # Has the token completed the circuit and returned to initiator?
-        if initiator == self.node_id:
+        # Rule 4: When the token returns to the initiator (initiator already in ids), the leader is max(ids).
+        if initiator == self.node_id and self.node_id in ids:
             logger.info(
-                f"Node {self.node_id}: Ring election token returned! Alive nodes collected: {alive_nodes}"
+                f"Node {self.node_id}: Ring election token returned! Alive ids collected: {ids}"
             )
             self.cancel_timers()
-            # Determine winner: node with highest ID
-            if not alive_nodes:
-                alive_nodes = [self.node_id]
-            winner = max(alive_nodes)
+            winner = max(ids) if ids else self.node_id
             logger.info(f"Node {self.node_id}: Ring election WINNER is node {winner}")
 
             # Send RING_COORDINATOR token around the ring
@@ -177,20 +174,24 @@ class RingElection:
                 },
             )
             # Update self state
-            status = NodeStatus.LEADER if winner == self.node_id else NodeStatus.ALIVE
+            status = NodeStatus.LEADER if winner == self.node_id else NodeStatus.FOLLOWER
             await self.on_state_change(status, winner)
 
             await self.forward_around_ring(coord_msg)
-            self.reset()
             return
 
-        # Not initiator: append self to alive list if not already there and forward
-        if self.node_id not in alive_nodes:
-            alive_nodes.append(self.node_id)
-            payload["alive"] = alive_nodes
+        # Not initiator (or initiator first seeing its token before completion):
+        # append self to ids if not already there and forward
+        if self.node_id not in ids:
+            ids.append(self.node_id)
+        payload["ids"] = ids
+        payload["alive"] = ids
 
         self.cancel_timers()
-        self._timer_task = asyncio.create_task(self._wait_election_timeout())
+        ring_size = len(self.get_peers())
+        timeout = 3.0 * ring_size * 0.5
+        self._timer_task = asyncio.create_task(self._wait_election_timeout(timeout))
+
         await self.on_state_change(NodeStatus.ELECTING, None)
         msg.from_node = self.node_id
         await self.forward_around_ring(msg)
@@ -202,11 +203,12 @@ class RingElection:
         leader = payload.get("leader")
 
         logger.info(f"Node {self.node_id}: Received RING_COORDINATOR token with leader {leader}")
-        status = NodeStatus.LEADER if leader == self.node_id else NodeStatus.ALIVE
+        status = NodeStatus.LEADER if leader == self.node_id else NodeStatus.FOLLOWER
         await self.on_state_change(status, leader)
+        self.cancel_timers()
         self.reset()
 
-        # If we are NOT the original initiator who sent the coordinator token, forward it!
+        # Rule 4: each node sets leader_id and forwards; it stops when it returns to the initiator.
         if initiator != self.node_id:
             msg.from_node = self.node_id
             await self.forward_around_ring(msg)

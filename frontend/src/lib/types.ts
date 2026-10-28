@@ -1,4 +1,4 @@
-export type NodeStatusType = 'ALIVE' | 'DEAD' | 'ELECTING' | 'LEADER';
+export type NodeStatusType = 'FOLLOWER' | 'ALIVE' | 'DEAD' | 'ELECTING' | 'LEADER';
 export type AlgorithmType = 'bully' | 'ring';
 export type CameraMode = 'auto-orbit' | 'orbit' | 'follow-election' | 'top-down';
 export type ActiveTabType = 'dashboard' | 'analytics' | 'replay';

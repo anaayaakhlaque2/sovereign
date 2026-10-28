@@ -23,6 +23,15 @@ def init_db() -> None:
         conn.exec_driver_sql("PRAGMA journal_mode=WAL;")
         conn.exec_driver_sql("PRAGMA synchronous=NORMAL;")
     SQLModel.metadata.create_all(engine)
+    with engine.connect() as conn:
+        try:
+            conn.exec_driver_sql("ALTER TABLE elections ADD COLUMN delivered_messages INTEGER DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            conn.exec_driver_sql("ALTER TABLE elections ADD COLUMN failed_to_dead_node INTEGER DEFAULT 0;")
+        except Exception:
+            pass
 
 
 def get_session() -> Generator[Session, None, None]:

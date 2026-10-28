@@ -101,6 +101,10 @@ class ClusterSupervisor:
             self.current_algorithm.value,
             "--gateway-port",
             str(self.gateway_telemetry_port),
+            "--ping-interval",
+            "1.0",
+            "--heartbeat-timeout",
+            "2.2",
         ]
 
         logger.info(f"Spawning Node {node_id} on port {port}...")
@@ -115,7 +119,7 @@ class ClusterSupervisor:
         self.node_cache[node_id] = {
             "id": node_id,
             "port": port,
-            "status": NodeStatus.ALIVE.value,
+            "status": NodeStatus.FOLLOWER.value,
             "leader_id": self.current_leader,
             "algorithm": self.current_algorithm.value,
         }
@@ -184,13 +188,13 @@ class ClusterSupervisor:
         reply = await self.send_control(node_id, {"action": ControlAction.REVIVE.value})
         if reply and reply.get("status") == "ok":
             if node_id in self.node_cache:
-                self.node_cache[node_id]["status"] = NodeStatus.ALIVE.value
+                self.node_cache[node_id]["status"] = NodeStatus.FOLLOWER.value
             if hasattr(self, 'telemetry') and self.telemetry:
                 await self.telemetry.broadcast_ws({
                     "type": "EVENT",
                     "event_type": "STATE_CHANGED",
                     "node_id": node_id,
-                    "data": {"status": NodeStatus.ALIVE.value, "leader_id": self.current_leader},
+                    "data": {"status": NodeStatus.FOLLOWER.value, "leader_id": self.current_leader},
                     "leader": self.current_leader,
                     "lamport": 0,
                     "ts": time.time(),

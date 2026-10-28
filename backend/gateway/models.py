@@ -21,6 +21,8 @@ class ElectionRecord(SQLModel, table=True):
     end_ts: Optional[float] = None
     duration_ms: Optional[float] = None
     election_messages: int = 0
+    delivered_messages: int = 0
+    failed_to_dead_node: int = 0
     heartbeat_messages: int = 0
     total_messages: int = 0
 

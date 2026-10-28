@@ -1,13 +1,13 @@
 """
 Bully Leader Election Algorithm Implementation
-Implements FR-5, FR-8, FR-9, and Section 9 specifications.
+Implements Garcia-Molina (1982) specification according to Sovereign rules.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import uuid
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 from backend.protocol import AlgorithmType, Message, MessageType, NodeStatus
 
 logger = logging.getLogger("sovereign.bully")
@@ -21,6 +21,7 @@ class BullyElection:
         send_message: Callable[[Message], Coroutine[Any, Any, bool]],
         broadcast_message: Callable[[Message, List[int]], Coroutine[Any, Any, None]],
         on_state_change: Callable[[NodeStatus, Optional[int]], Coroutine[Any, Any, None]],
+        get_lamport: Optional[Callable[[], int]] = None,
         ok_timeout: float = 1.0,
         coordinator_timeout: float = 3.0,
     ) -> None:
@@ -29,6 +30,7 @@ class BullyElection:
         self.send_message = send_message
         self.broadcast_message = broadcast_message
         self.on_state_change = on_state_change
+        self.get_lamport = get_lamport
 
         self.ok_timeout = ok_timeout
         self.coordinator_timeout = coordinator_timeout
@@ -39,6 +41,7 @@ class BullyElection:
         self._coord_timer_task: Optional[asyncio.Task] = None
         self._received_ok: bool = False
         self._counter: int = 0
+        self._handled_elections: Set[str] = set()
 
     def cancel_timers(self) -> None:
         current = asyncio.current_task()
@@ -53,7 +56,9 @@ class BullyElection:
         """Starts a Bully election from this node."""
         self.cancel_timers()
         self._counter += 1
-        self.current_election_id = forced_election_id or f"bully-{self.node_id}-{self._counter}-{uuid.uuid4().hex[:6]}"
+        lamp = self.get_lamport() if self.get_lamport else self._counter
+        self.current_election_id = forced_election_id or f"bully-{self.node_id}-{lamp}-{uuid.uuid4().hex[:6]}"
+        self._handled_elections.add(self.current_election_id)
         self.election_initiator_id = self.node_id
         self._received_ok = False
 
@@ -61,7 +66,7 @@ class BullyElection:
         await self.on_state_change(NodeStatus.ELECTING, None)
 
         peers = self.get_peers()
-        higher_nodes = [pid for pid in peers.keys() if pid > self.node_id]
+        higher_nodes = sorted([pid for pid in peers.keys() if pid > self.node_id])
 
         if not higher_nodes:
             # Highest ID in the cluster: declare leadership immediately!
@@ -108,7 +113,7 @@ class BullyElection:
 
         # Broadcast COORDINATOR to all other peers
         peers = self.get_peers()
-        other_peers = [pid for pid in peers.keys() if pid != self.node_id]
+        other_peers = sorted([pid for pid in peers.keys() if pid != self.node_id])
 
         msg = Message(
             type=MessageType.COORDINATOR,
@@ -124,9 +129,9 @@ class BullyElection:
     async def handle_election_message(self, msg: Message) -> None:
         """Handle incoming ELECTION message."""
         sender = msg.from_node
-        initiator = msg.payload.get("initiator", sender)
 
-        # Always reply OK if we have higher ID
+        # Rule 2: A node receiving ELECTION from a lower id replies OK immediately,
+        # then starts its own election (only once per election_id).
         if self.node_id > sender:
             ok_msg = Message(
                 type=MessageType.OK,
@@ -138,10 +143,11 @@ class BullyElection:
             )
             await self.send_message(ok_msg)
 
-            # Resolve simultaneous elections:
-            # If we are not currently electing, or if this election has a higher priority, start our own election
-            if not self._ok_timer_task or self._ok_timer_task.done():
-                await self.start_election()
+            # Start own election only once per election_id
+            election_id = msg.election_id or f"bully-{self.node_id}-{self._counter}"
+            if election_id not in self._handled_elections:
+                self._handled_elections.add(election_id)
+                await self.start_election(forced_election_id=election_id)
 
     async def handle_ok_message(self, msg: Message) -> None:
         """Handle incoming OK message from a higher node."""
@@ -149,8 +155,10 @@ class BullyElection:
         self._received_ok = True
         if self._ok_timer_task and not self._ok_timer_task.done():
             self._ok_timer_task.cancel()
+            self._ok_timer_task = None
 
-        # Start coordinator timer if not already running
+        # Rule 3: If initiator receives at least one OK, it stops and waits T_coord=3.0s
+        # for a COORDINATOR message. If none arrives, restart the election.
         if not self._coord_timer_task or self._coord_timer_task.done():
             self._coord_timer_task = asyncio.create_task(self._wait_for_coordinator())
 
@@ -158,8 +166,8 @@ class BullyElection:
         """Handle incoming COORDINATOR message."""
         new_leader = msg.payload.get("leader", msg.from_node)
 
-        # Bully algorithm textbook rule (Garcia-Molina 1982):
-        # A node with higher ID rejects lower-ID coordinator and immediately asserts leadership!
+        # Rule 5: A node receiving COORDINATOR from a lower id than itself must reject it
+        # and start its own election (a higher node has returned).
         if new_leader < self.node_id:
             logger.warning(
                 f"Node {self.node_id}: Received COORDINATOR from lower node {new_leader}! Bullying and initiating takeover election."
@@ -171,5 +179,6 @@ class BullyElection:
         self.cancel_timers()
         self.current_election_id = None
         self.election_initiator_id = None
-        status = NodeStatus.LEADER if new_leader == self.node_id else NodeStatus.ALIVE
+        # Rule R6: sets leader_id, sets status to FOLLOWER (or LEADER if winner)
+        status = NodeStatus.LEADER if new_leader == self.node_id else NodeStatus.FOLLOWER
         await self.on_state_change(status, new_leader)

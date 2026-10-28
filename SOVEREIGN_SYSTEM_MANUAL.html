@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sovereign: Complete System Manual & Viva Guide</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+
+    :root {
+      --primary: #d97706;
+      --primary-dark: #b45309;
+      --bg-dark: #0f172a;
+      --card-bg: #ffffff;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --accent-blue: #2563eb;
+      --accent-green: #16a34a;
+      --accent-red: #dc2626;
+      --code-bg: #f8fafc;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text-main);
+      background-color: #f1f5f9;
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 60px 70px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    }
+
+    /* Print action bar */
+    .action-bar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 25px;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #d97706;
+      transform: translateY(-1px);
+    }
+
+    /* Title & Header */
+    .doc-header {
+      text-align: center;
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 40px;
+      margin-bottom: 40px;
+    }
+
+    .crown-badge {
+      display: inline-block;
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 34px;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      font-size: 16px;
+      color: var(--primary-dark);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 12px;
+    }
+
+    .meta-tags {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .meta-tag {
+      background: #f8fafc;
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* Typography */
+    h2 {
+      font-family: 'Cinzel', serif;
+      font-size: 22px;
+      color: #0f172a;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 8px;
+      margin-top: 45px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h3 {
+      font-size: 16px;
+      color: #334155;
+      margin-top: 25px;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    p {
+      margin-bottom: 14px;
+      font-size: 15px;
+      color: #334155;
+    }
+
+    strong {
+      color: #0f172a;
+    }
+
+    /* Highlight callouts */
+    .callout {
+      background: #fffbeb;
+      border-left: 4px solid var(--primary);
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+
+    .callout-blue {
+      background: #eff6ff;
+      border-left: 4px solid var(--accent-blue);
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0 25px 0;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f8fafc;
+      color: #0f172a;
+      text-align: left;
+      padding: 12px 14px;
+      font-weight: 700;
+      border-bottom: 2px solid #cbd5e1;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: top;
+      color: #334155;
+    }
+
+    tr:hover td {
+      background: #fafafa;
+    }
+
+    /* Code & diagrams */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-x: auto;
+      margin: 18px 0;
+      color: #0f172a;
+    }
+
+    code {
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #b45309;
+    }
+
+    /* Q&A Cards */
+    .qa-box {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      background: #fafafa;
+      page-break-inside: avoid;
+    }
+
+    .qa-question {
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 8px;
+      font-size: 15px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .qa-answer {
+      color: #334155;
+      font-size: 14px;
+      padding-left: 24px;
+      line-height: 1.5;
+      border-left: 2px solid var(--primary);
+    }
+
+    /* Print styles */
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .container {
+        box-shadow: none;
+        padding: 0;
+        max-width: 100%;
+      }
+      .action-bar {
+        display: none !important;
+      }
+      h2 {
+        page-break-before: always;
+      }
+      h2:first-of-type {
+        page-break-before: avoid;
+      }
+      .qa-box, table, pre {
+        page-break-inside: avoid;
+      }
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="action-bar">
+      <button class="btn" onclick="window.print()">🖨️ Print to PDF / Save as PDF</button>
+    </div>
+
+    <div class="doc-header">
+      <div class="crown-badge">👑</div>
+      <h1>SOVEREIGN</h1>
+      <div class="subtitle">Complete System Manual & Viva Presentation Guide</div>
+      <div class="meta-tags">
+        <span class="meta-tag">Distributed Computing Simulator</span>
+        <span class="meta-tag">Leader Election Algorithms</span>
+        <span class="meta-tag">Lamport Clocks</span>
+        <span class="meta-tag">Full TCP Sockets & WebSockets</span>
+      </div>
+    </div>
+
+    <h2>1. Executive Summary: What is Sovereign?</h2>
+    <p>
+      <strong>Sovereign</strong> is an interactive 3D simulation of a <strong>Distributed Computing System</strong> disguised as a fantasy kingdom of floating sky castles.
+    </p>
+    <p>
+      In the real world, distributed systems power companies like <strong>Google, Amazon, Netflix, and online banks</strong>. Instead of running on a single computer, these systems distribute their work across dozens, hundreds, or thousands of independent server computers (called <strong>Nodes</strong>).
+    </p>
+    <p>
+      To prevent chaos (e.g., two computers modifying the same database record at the same moment), <strong>one node must always be elected the "Leader" (or "Coordinator")</strong>.
+    </p>
+    <div class="callout">
+      <strong>The Fundamental Problem in Distributed Computing:</strong><br>
+      What happens if the leader server loses power, crashes, or gets cut off from the network? The remaining living computers must independently detect the leader's death and elect a single new leader <em>without any human administrator intervention</em>.
+    </div>
+    <p>
+      Sovereign visually demonstrates how distributed nodes solve this problem using the two classic textbook algorithms: the <strong>Bully Algorithm</strong> and the <strong>Ring Algorithm</strong> over raw, independent TCP sockets.
+    </p>
+
+    <h2>2. The Kingdom Metaphor: How to Visualize It</h2>
+    <p>Every fantasy element on the screen directly maps to a technical distributed systems concept:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Visual in Sovereign</th>
+          <th>Technical Concept in Distributed Systems</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Floating Sky Island</strong></td>
+          <td>The local network / cluster boundary hosting all machines.</td>
+        </tr>
+        <tr>
+          <td><strong>Each Castle (1 to 5)</strong></td>
+          <td>An <strong>independent computer program (OS process)</strong> running on its own local TCP port (e.g., 9001, 9002, 9003).</td>
+        </tr>
+        <tr>
+          <td><strong>Castle Number</strong></td>
+          <td>The unique <strong>Process ID (Node ID)</strong>. In distributed algorithms, higher IDs indicate higher rank/priority.</td>
+        </tr>
+        <tr>
+          <td><strong>The Sovereign (King)</strong></td>
+          <td>The <strong>Elected Coordinator (Leader)</strong> node currently in charge of the cluster.</td>
+        </tr>
+        <tr>
+          <td><strong>The Golden Crown</strong></td>
+          <td>The <strong>Coordinator Token/Status</strong>. Only one living node can wear the crown at any time.</td>
+        </tr>
+        <tr>
+          <td><strong>Floating Sky Crown</strong></td>
+          <td>The <strong>Vacant State</strong>. When the king crashes, the crown ascends to the center sky <code>[0, 7.2, 0]</code> until a new leader is elected.</td>
+        </tr>
+        <tr>
+          <td><strong>Glowing Flying Orbs</strong></td>
+          <td>Real <strong>TCP network packets</strong> traveling across the network between computer processes.</td>
+        </tr>
+        <tr>
+          <td><strong>Tilted Broken Castle</strong></td>
+          <td>A <strong>Dead / Crashed Node</strong> that cannot send or receive network traffic.</td>
+        </tr>
+        <tr>
+          <td><strong>Blinking Blue Ring</strong></td>
+          <td>An <strong>Electing Node</strong> actively broadcasting or processing election ballots.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. How Castles Detect King Failure: The Heartbeat</h2>
+    <p>
+      In a distributed system, computers cannot "see" each other physically. The only way they know if another computer is alive is by sending messages over the network.
+    </p>
+    <pre>
+[Follower Castle]  ─── "Are you alive?" (Heartbeat Ping every 1.0s) ───►  [King Castle]
+[Follower Castle]  ◄── "Yes, I am alive!" (Heartbeat ACK) ──────────────  [King Castle]
+    </pre>
+    <p>Here is the exact lifecycle of failure detection in Sovereign:</p>
+    <ol style="padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;">
+      <li><strong>Periodic Ping</strong>: Every <strong>1.0 second</strong>, every living follower castle sends a tiny TCP packet to the King: <em>"Are you alive?"</em></li>
+      <li><strong>Immediate Reply</strong>: As long as the King process is healthy, it immediately replies with an acknowledgement: <em>"Yes, I am alive!"</em></li>
+      <li><strong>Failure Detection</strong>: When the King is assassinated or crashes:
+        <ul style="padding-left: 20px; margin-top: 6px;">
+          <li>The King stops replying to heartbeats.</li>
+          <li>The followers wait for <strong>2.2 seconds</strong> (the failure timeout threshold).</li>
+          <li>Once 2.2 seconds pass without any response, the follower declares: <em>"The King is dead!"</em></li>
+        </ul>
+      </li>
+      <li><strong>Crown Ascends to the Sky</strong>: The golden crown lifts off the dead castle and hovers high above the island. Surviving castles immediately trigger an election.</li>
+    </ol>
+
+    <h2>4. Algorithm 1: The Bully Algorithm (Garcia-Molina, 1982)</h2>
+    <div class="callout">
+      <strong>The Core Motto:</strong> <em>"The node with the highest ID always bullies everyone smaller."</em><br>
+      Priority is determined strictly by Node ID (Process ID). Node 5 outranks Node 4, Node 4 outranks Node 3, and so on.
+    </div>
+
+    <pre>
+[King Node 5 Crashes]
+       │
+       ▼
+[Node 1 notices 2.2s heartbeat timeout]
+       │
+       ▼
+[Node 1 broadcasts ELECTION to all higher IDs: 2, 3, 4, 5]
+       │
+       ▼
+[Nodes 2, 3, 4 reply 'OK' to Node 1: "Quiet, we are higher than you!"]
+       │
+       ▼
+[Node 4 broadcasts ELECTION to Node 5]
+       │
+       ▼
+[Node 5 is dead (No answer after 1.0s timeout)]
+       │
+       ▼
+[Node 4 broadcasts COORDINATOR: "I am your new Sovereign!"]
+       │
+       ▼
+[Golden crown swoops down and crowns Node 4]
+    </pre>
+
+    <h3>The 5 Steps of Bully Election:</h3>
+    <ol style="padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;">
+      <li><strong>Initiation</strong>: Any node that notices the leader died sends an <code>ELECTION</code> packet to <strong>all nodes with higher IDs</strong>.</li>
+      <li><strong>The "OK" Response</strong>: If any higher node is alive, it sends back an <code>OK</code> packet: <em>"I have a higher ID than you, stand down, I'll take over."</em> The lower node stops its election and waits.</li>
+      <li><strong>Escalation</strong>: The higher node now sends <code>ELECTION</code> to any nodes higher than itself.</li>
+      <li><strong>Victory Claim</strong>: If no higher node answers within the timeout (1.0 second), this node realizes it is the highest living node in the entire network! It broadcasts a <code>COORDINATOR</code> packet to all nodes.</li>
+      <li><strong>Revival Takeover (The Bully Rule)</strong>: If the highest node (e.g. Node 5) was dead and suddenly revives (comes back to life), it does not wait politely. Because its ID is higher, it immediately deposes the current leader and takes the crown back!</li>
+    </ol>
+
+    <div class="callout-blue">
+      <strong>Mathematical Complexity:</strong><br>
+      • Worst-case message traffic: <strong>O(N²)</strong>. If the lowest node detects failure, everyone messages everyone higher: N(N-1)/2 messages.<br>
+      • Very loud, chatty network traffic, but reaches leader decision quickly because broadcasts happen in parallel.
+    </div>
+
+    <h2>5. Algorithm 2: The Ring Algorithm (Chang & Roberts, 1979)</h2>
+    <div class="callout">
+      <strong>The Core Motto:</strong> <em>"An orderly, polite relay race in a circle."</em><br>
+      Castles are logically arranged in a circular ring: Castle 1 &rarr; Castle 2 &rarr; Castle 3 &rarr; Castle 4 &rarr; Castle 5 &rarr; Castle 1.
+    </div>
+
+    <pre>
+Castle 1 (detects failure, initiates list: [1])
+       │
+       ▼
+Castle 2 (receives [1], appends own ID: [1, 2])
+       │
+       ▼
+Castle 3 (receives [1, 2], appends own ID: [1, 2, 3])
+       │
+       ▼
+Castle 4 (receives [1, 2, 3], appends own ID: [1, 2, 3, 4])
+       │ (skips dead Castle 5 over TCP)
+       ▼
+Returns back to Castle 1!
+Castle 1 inspects list: Winner = Max(1, 2, 3, 4) = Castle 4!
+Castle 1 circulates RING_COORDINATOR token: "Castle 4 is Sovereign!"
+    </pre>
+
+    <h3>The 5 Steps of Ring Election:</h3>
+    <ol style="padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;">
+      <li><strong>Initiation</strong>: When a node detects leader failure, it creates an <strong>Election Token</strong> containing an active list: <code>[1]</code>.</li>
+      <li><strong>Sequential Forwarding</strong>: It forwards the token clockwise to its alive successor (Castle 2).</li>
+      <li><strong>Appending IDs</strong>: Castle 2 appends its ID (<code>[1, 2]</code>) and forwards to Castle 3. Castle 3 appends its ID (<code>[1, 2, 3]</code>) and forwards to Castle 4.</li>
+      <li><strong>Fault Tolerance (Skipping Dead Nodes)</strong>: Castle 4 tries to contact Castle 5. Because Castle 5 is dead (TCP connection fails), Castle 4 automatically <strong>skips Castle 5</strong> and connects directly to Castle 1!</li>
+      <li><strong>Coronation</strong>: When the token completes a full circuit and returns to initiator (Castle 1), Castle 1 selects the maximum number from the list (<strong>Max = 4</strong>) and circulates a <code>RING_COORDINATOR</code> token declaring Castle 4 the new King.</li>
+    </ol>
+
+    <div class="callout-blue">
+      <strong>Mathematical Complexity:</strong><br>
+      • Message traffic: <strong>O(N)</strong>. The token visits each node once during election and once during announcement (roughly 2N messages).<br>
+      • Highly efficient, predictable, and low network bandwidth.
+    </div>
+
+    <h2>6. Every Button & Control Explained in Detail</h2>
+
+    <h3>Bottom Control Dock (Main Controls)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Control / Button</th>
+          <th>What You See in Plain English</th>
+          <th>What Happens Behind the Scenes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>💀 Assassinate King</strong></td>
+          <td>Instantly strikes down the current King with a lightning bolt.</td>
+          <td>Sends <code>POST /api/cluster/assassinate</code>. Kills the leader process, sets status to <code>DEAD</code>, lifts crown to the sky, and surviving followers begin an election.</td>
+        </tr>
+        <tr>
+          <td><strong>🗳️ Hold Election</strong></td>
+          <td>Manually triggers an election right now.</td>
+          <td>Sends <code>POST /api/cluster/election/start</code>. Forces living castles to exchange election orbs even if no node is dead.</td>
+        </tr>
+        <tr>
+          <td><strong>⚡ Chaos Mode: ON / OFF</strong></td>
+          <td>Unleashes a random thunderstorm that crashes and revives random castles.</td>
+          <td>A background worker randomly kills living nodes and revives dead nodes every 4–7 seconds to prove the system's fault-tolerance in chaotic conditions.</td>
+        </tr>
+        <tr>
+          <td><strong>🏰 Nodes Slider (3–9)</strong></td>
+          <td>Dynamically scales the number of castles in the kingdom.</td>
+          <td>Sends <code>POST /api/cluster/scale</code>. Spawns new Python OS processes for new nodes, or cleanly terminates excess processes.</td>
+        </tr>
+        <tr>
+          <td><strong>🎚️ Sliders Icon</strong></td>
+          <td>Toggles the Network Fault Injection drawer.</td>
+          <td>Reveals the simulated network latency and packet drop sliders.</td>
+        </tr>
+        <tr>
+          <td><strong>⏱️ Latency Slider (0–1000ms)</strong></td>
+          <td>Simulates slow satellite internet or bad cables.</td>
+          <td>Instructs TCP sockets to sleep for <em>X</em> ms before processing packets. Glowing orbs travel visibly slower through the sky.</td>
+        </tr>
+        <tr>
+          <td><strong>📦 Drop Rate Slider (0–50%)</strong></td>
+          <td>Simulates flaky Wi-Fi or lost packets.</td>
+          <td>Causes nodes to randomly drop <em>X%</em> of incoming messages to test algorithm retry mechanisms.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Top Navigation Bar & Utilities</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Control</th>
+          <th>What It Does in Plain English</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>BULLY / RING Selector</strong></td>
+          <td>Instantly toggles between the Bully and Ring election algorithms without restarting the servers.</td>
+        </tr>
+        <tr>
+          <td><strong>☀️ / 🌙 Day & Night Toggle</strong></td>
+          <td>Switches between vibrant Day Mode (crystal-clear black castle numbers) and dramatic Night Mode (cinematic dark sky with glowing runes).</td>
+        </tr>
+        <tr>
+          <td><strong>Heartbeat Toggle (WiFi icon)</strong></td>
+          <td>Toggles visual rendering of the periodic blue heartbeat pings flying between followers and the King (off by default to keep the view clean).</td>
+        </tr>
+        <tr>
+          <td><strong>Tab 1: 🏰 Kingdom</strong></td>
+          <td>Main 3D interactive floating kingdom view.</td>
+        </tr>
+        <tr>
+          <td><strong>Tab 2: 📊 Analytics</strong></td>
+          <td>Opens the Performance Benchmarking and Scientific Comparison laboratory.</td>
+        </tr>
+        <tr>
+          <td><strong>Tab 3: ⏱️ Replay</strong></td>
+          <td>Opens the Lamport Logical Time Scrubber to step through past events in causal order.</td>
+        </tr>
+        <tr>
+          <td><strong>Sovereign Status Badge</strong></td>
+          <td>Shows <code>👑 Sovereign: Node X</code> or a pulsing red alert: <code>🔴 Crown Vacant (Electing...)</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Left Drawer: 🏰 Castles Panel</h3>
+    <p>Click the <strong>🏰 Castles</strong> floating pill on the left edge of your screen to open:</p>
+    <ul style="padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;">
+      <li><strong>Individual Castle Cards</strong>: Displays Node ID, real TCP Port (e.g., <code>Port 9001</code>), and current state (<code>LEADER</code>, <code>ALIVE</code>, <code>ELECTING</code>, or <code>DEAD</code>).</li>
+      <li><strong>💀 Kill Button</strong>: Allows you to assassinate any specific castle of your choice with one click.</li>
+      <li><strong>❤️ Revive Button</strong>: Brings a dead castle back to life. (In Bully mode, revives trigger an instant takeover challenge!).</li>
+    </ul>
+
+    <h3>Right Drawer: 📜 Live Logs Panel</h3>
+    <p>Click the <strong>📜 Live Logs</strong> floating pill on the right edge of your screen to open:</p>
+    <ul style="padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;">
+      <li><strong>Real-time Packet Stream</strong>: Displays the exact TCP packets traveling across your computer with millisecond timestamps and Lamport clock values.</li>
+      <li><strong>Filter Tabs</strong>: Filter logs by message type: <code>ELECTION</code>, <code>OK</code>, <code>COORDINATOR</code>, or <code>HEARTBEAT</code>.</li>
+      <li><strong>Trash Icon</strong>: Clears the on-screen logs.</li>
+    </ul>
+
+    <h2>7. What the "Analytics" Feature is Doing (Tab 2)</h2>
+    <p>
+      Clicking <strong>Analytics</strong> opens the <strong>Distributed Systems Science Laboratory</strong>. Its purpose is to give you undeniable empirical evidence to show your professors and examiners that the theoretical math matches actual system execution!
+    </p>
+    <ol style="padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;">
+      <li><strong>Message Complexity Chart (Total Packets Sent)</strong>:
+        <ul style="padding-left: 20px; margin-top: 4px;">
+          <li><strong>Bully (Orange)</strong>: Quadratic curve O(N²). As the cluster grows to 9 nodes, message volume skyrockets because everyone messages everyone higher.</li>
+          <li><strong>Ring (Gold)</strong>: Linear line O(N). Message volume stays small and flat because the token simply circulates the circle twice.</li>
+        </ul>
+      </li>
+      <li><strong>Election Duration Chart (Milliseconds to Elect)</strong>:
+        <ul style="padding-left: 20px; margin-top: 4px;">
+          <li>Measures the exact elapsed time from King death to coronation. Bully completes faster because messages are sent in parallel; Ring is slightly slower because messages travel sequentially node-by-node.</li>
+        </ul>
+      </li>
+      <li><strong>"Run Benchmark" Button</strong>:
+        <ul style="padding-left: 20px; margin-top: 4px;">
+          <li>Automatically conducts 10 rounds of automated elections across different node counts, computes real statistical averages, and updates the charts live.</li>
+        </ul>
+      </li>
+      <li><strong>Export CSV Button</strong>:
+        <ul style="padding-left: 20px; margin-top: 4px;">
+          <li>Downloads a spreadsheet containing every election's duration and message count for your project report.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <h2>8. What the "Replay" Feature is Doing (Tab 3)</h2>
+    <p>
+      When you click <strong>Replay</strong>, you open a <strong>Causal Time-Machine</strong>.
+    </p>
+    <div class="callout">
+      <strong>The Fundamental Problem with Physical Time:</strong><br>
+      Independent computers have separate quartz hardware clocks that drift by milliseconds or seconds. You cannot trust physical timestamps to know which event happened first!
+    </div>
+    <p>
+      To solve this, Sovereign uses <strong>Lamport Logical Clocks (Leslie Lamport, Turing Award 2013)</strong>:
+    </p>
+    <ul style="padding-left: 20px; font-size: 14px; color: #334155; line-height: 1.8;">
+      <li>Every node maintains a monotonically increasing integer counter (1, 2, 3...).</li>
+      <li>Every network packet includes the sender's current clock.</li>
+      <li>When receiving a message, a node updates its clock: <code>Clock = max(LocalClock, ReceivedClock) + 1</code>.</li>
+      <li>This guarantees that if Event A caused Event B, then <strong>Clock(A) &lt; Clock(B)</strong>.</li>
+    </ul>
+    <p>
+      Using the <strong>Timeline Scrubber</strong> in Tab 3, you can drag the slider back in time and step through history packet-by-packet to show examiners:
+      <em>"At Lamport Tick 12 Node 5 died; at Tick 13 Node 1 noticed and called an election; at Tick 15 Node 4 replied OK; at Tick 18 Node 4 took the crown."</em>
+    </p>
+
+    <h2>9. Top 7 Viva Presentation Questions & Model Answers</h2>
+
+    <div class="qa-box">
+      <div class="qa-question"><span>Q1:</span> What is the main objective of your project?</div>
+      <div class="qa-answer">
+        "Sovereign is an interactive 3D distributed systems simulator. It runs real independent operating system processes communicating over TCP sockets, demonstrating how distributed nodes detect leader failure via periodic heartbeats and elect a new coordinator using the classic Bully and Ring algorithms."
+      </div>
+    </div>
+
+    <div class="qa-box">
+      <div class="qa-question"><span>Q2:</span> Why is the Bully algorithm O(N²) while the Ring algorithm is O(N)?</div>
+      <div class="qa-answer">
+        "In Bully, every node broadcasts election messages to all higher nodes in parallel. In the worst case, this requires N(N-1)/2 messages, which is O(N²). In Ring, an election token travels sequentially around the circle once, and a victory token travels around once, requiring approximately 2N messages, which is O(N)."
+      </div>
+    </div>
+
+    <div class="qa-box">
+      <div class="qa-question"><span>Q3:</span> Why is it named the 'Bully' algorithm?</div>
+      <div class="qa-answer">
+        "Because higher Node IDs have absolute authority over lower IDs. Any living higher-ID node can immediately bully lower nodes into submission by replying 'OK' and seizing control of the election."
+      </div>
+    </div>
+
+    <div class="qa-box">
+      <div class="qa-question"><span>Q4:</span> How does your Ring algorithm handle node crashes along the circle?</div>
+      <div class="qa-answer">
+        "Each node maintains the circular successor list. If its immediate neighbor's TCP socket is closed or unreachable, the node automatically catches the socket exception, skips the dead neighbor, and forwards the token to the next living successor in the ring."
+      </div>
+    </div>
+
+    <div class="qa-box">
+      <div class="qa-question"><span>Q5:</span> Why did you implement Lamport Logical Clocks?</div>
+      <div class="qa-answer">
+        "Physical clocks on different computers drift and cannot be synchronized perfectly. Lamport logical clocks assign an unambiguous causal sequence number to every event, enabling deterministic replay and auditing of the distributed execution."
+      </div>
+    </div>
+
+    <div class="qa-box">
+      <div class="qa-question"><span>Q6:</span> What happens when the King crashes in the 3D visualization?</div>
+      <div class="qa-answer">
+        "Followers detect the missing heartbeat within 2.2 seconds. The golden crown detaches from the dead castle, floats to the center sky above the island, and remains vacant until an election declares a new living sovereign."
+      </div>
+    </div>
+
+    <div class="qa-box">
+      <div class="qa-question"><span>Q7:</span> Are Bully and Ring algorithms used in modern cloud databases like Google Spanner or AWS DynamoDB?</div>
+      <div class="qa-answer">
+        "Rarely today, because neither handles network partitions (split-brain) well. Modern production cloud databases use quorum consensus algorithms like Raft or Multi-Paxos, which require majority agreement ((N/2)+1) before electing a leader."
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

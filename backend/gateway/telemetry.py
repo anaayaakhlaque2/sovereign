@@ -64,18 +64,25 @@ def _persist_event_sync(
                     )
                     session.add(election_rec)
 
-                if msg_type in (MessageType.HEARTBEAT.value, MessageType.HEARTBEAT_ACK.value):
-                    election_rec.heartbeat_messages += 1
-                elif msg_type in (
-                    MessageType.ELECTION.value,
-                    MessageType.OK.value,
-                    MessageType.COORDINATOR.value,
-                    MessageType.RING_ELECTION.value,
-                    MessageType.RING_COORDINATOR.value,
-                ):
-                    election_rec.election_messages += 1
+                # Count a message once, at the SENDER, when it is sent. Do NOT also count the receiver event.
+                if event_type == "MESSAGE_SENT":
+                    delivered = evt_data.get("delivered", True)
+                    if msg_type in (MessageType.HEARTBEAT.value, MessageType.HEARTBEAT_ACK.value):
+                        election_rec.heartbeat_messages += 1
+                    elif msg_type in (
+                        MessageType.ELECTION.value,
+                        MessageType.OK.value,
+                        MessageType.COORDINATOR.value,
+                        MessageType.RING_ELECTION.value,
+                        MessageType.RING_COORDINATOR.value,
+                    ):
+                        if delivered:
+                            election_rec.delivered_messages += 1
+                            election_rec.election_messages += 1
+                        else:
+                            election_rec.failed_to_dead_node += 1
 
-                election_rec.total_messages += 1
+                    election_rec.total_messages += 1
 
                 if msg_type in (MessageType.COORDINATOR.value, MessageType.RING_COORDINATOR.value):
                     winner = evt_data.get("payload", {}).get("leader", from_node)

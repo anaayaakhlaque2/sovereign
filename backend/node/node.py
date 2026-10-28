@@ -50,10 +50,10 @@ class Node:
         algorithm: AlgorithmType = AlgorithmType.BULLY,
         gateway_host: str = "127.0.0.1",
         gateway_port: Optional[int] = None,
-        heartbeat_interval: float = 2.0,
-        heartbeat_timeout: float = 3.0,
-        ok_timeout: float = 1.5,
-        coordinator_timeout: float = 4.0,
+        heartbeat_interval: float = 1.0,
+        heartbeat_timeout: float = 2.2,
+        ok_timeout: float = 1.0,
+        coordinator_timeout: float = 3.0,
     ) -> None:
         self.node_id = node_id
         self.port = port
@@ -63,10 +63,11 @@ class Node:
         self.gateway_host = gateway_host
         self.gateway_port = gateway_port
 
-        # State
-        self.status = NodeStatus.ALIVE
+        # State (Rule R2)
+        self.status = NodeStatus.FOLLOWER
         self.leader_id: Optional[int] = None
         self.clock = LamportClock()
+        self.sent_messages: List[Dict[str, Any]] = []
 
         # Network fault injection
         self.network_delay: float = 0.0
@@ -79,6 +80,7 @@ class Node:
             send_message=self._send_direct,
             broadcast_message=self._broadcast_direct,
             on_state_change=self._on_state_change,
+            get_lamport=lambda: self.clock.value,
             ok_timeout=ok_timeout,
             coordinator_timeout=coordinator_timeout,
         )
@@ -87,6 +89,7 @@ class Node:
             get_peers=lambda: self.peers,
             send_message_to_node=self._send_to_node_id,
             on_state_change=self._on_state_change,
+            get_lamport=lambda: self.clock.value,
         )
         self.heartbeat = HeartbeatDetector(
             node_id=self.node_id,
@@ -99,6 +102,12 @@ class Node:
 
         self._server: Optional[asyncio.Server] = None
         self._running: bool = False
+
+    @property
+    def current_election_id(self) -> Optional[str]:
+        if self.algorithm == AlgorithmType.BULLY:
+            return self.bully.current_election_id
+        return self.ring.current_election_id
 
     # -------------------------------------------------------------------------
     # Server Lifecycle
@@ -187,7 +196,7 @@ class Node:
         if self.network_delay > 0.0:
             await asyncio.sleep(self.network_delay)
 
-        # Lamport logical clock update
+        # Lamport logical clock update (Rule R5)
         self.clock.update(msg.lamport)
 
         # Emit telemetry event
@@ -260,6 +269,14 @@ class Node:
         msg.lamport = self.clock.tick()
         raw = msg.to_json()
 
+        is_election_msg = msg.type in (
+            MessageType.ELECTION,
+            MessageType.OK,
+            MessageType.COORDINATOR,
+            MessageType.RING_ELECTION,
+            MessageType.RING_COORDINATOR,
+        )
+
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection("127.0.0.1", target_port),
@@ -273,12 +290,42 @@ class Node:
             if not ack_raw:
                 writer.close()
                 await writer.wait_closed()
+                if is_election_msg:
+                    self.sent_messages.append({
+                        "from": self.node_id,
+                        "to": target_id,
+                        "type": msg.type.value,
+                        "election_id": msg.election_id,
+                        "algorithm": msg.algorithm.value,
+                        "payload": msg.payload,
+                        "delivered": False,
+                    })
+                    await self._send_event("MESSAGE_SENT", {
+                        "from": self.node_id,
+                        "to": target_id,
+                        "type": msg.type.value,
+                        "election_id": msg.election_id,
+                        "algorithm": msg.algorithm.value,
+                        "payload": msg.payload,
+                        "delivered": False,
+                    })
                 return False
 
             writer.close()
             await writer.wait_closed()
 
-            # Telemetry
+            if is_election_msg:
+                self.sent_messages.append({
+                    "from": self.node_id,
+                    "to": target_id,
+                    "type": msg.type.value,
+                    "election_id": msg.election_id,
+                    "algorithm": msg.algorithm.value,
+                    "payload": msg.payload,
+                    "delivered": True,
+                })
+
+            # Telemetry: delivered successfully
             await self._send_event("MESSAGE_SENT", {
                 "from": self.node_id,
                 "to": target_id,
@@ -286,9 +333,29 @@ class Node:
                 "election_id": msg.election_id,
                 "algorithm": msg.algorithm.value,
                 "payload": msg.payload,
+                "delivered": True,
             })
             return True
         except Exception:
+            if is_election_msg:
+                self.sent_messages.append({
+                    "from": self.node_id,
+                    "to": target_id,
+                    "type": msg.type.value,
+                    "election_id": msg.election_id,
+                    "algorithm": msg.algorithm.value,
+                    "payload": msg.payload,
+                    "delivered": False,
+                })
+                await self._send_event("MESSAGE_SENT", {
+                    "from": self.node_id,
+                    "to": target_id,
+                    "type": msg.type.value,
+                    "election_id": msg.election_id,
+                    "algorithm": msg.algorithm.value,
+                    "payload": msg.payload,
+                    "delivered": False,
+                })
             return False
 
     async def _broadcast_direct(self, msg: Message, target_ids: List[int]) -> None:
@@ -334,11 +401,14 @@ class Node:
         logger.warning(f"[bold red]Node {self.node_id}: Detected failure of leader {self.leader_id}![/]")
         self.leader_id = None
         self.heartbeat.reset()
-        await self.trigger_election()
+        # Rule R3: Never start an election while already ELECTING.
+        if self.status not in (NodeStatus.DEAD, NodeStatus.ELECTING):
+            await self.trigger_election()
 
     async def trigger_election(self) -> None:
         """Initiates an election using current active algorithm."""
-        if self.status == NodeStatus.DEAD:
+        # Rule R3: Never start an election while already ELECTING.
+        if self.status in (NodeStatus.DEAD, NodeStatus.ELECTING):
             return
 
         if self.algorithm == AlgorithmType.BULLY:
@@ -364,22 +434,24 @@ class Node:
             return {"status": "ok", "node_id": self.node_id, "state": "DEAD"}
 
         elif action == ControlAction.REVIVE.value:
-            self.status = NodeStatus.ALIVE
+            # Rule R7: A node that is revived starts an election in Bully mode.
+            # In Ring mode it just rejoins the ring and learns the leader from the next COORDINATOR or by asking a peer.
+            self.status = NodeStatus.FOLLOWER
             self.leader_id = None
             self.ring.reset()
             self.bully.cancel_timers()
             self.heartbeat.reset()
             self.heartbeat.start()
-            await self._send_event("STATE_CHANGED", {"status": NodeStatus.ALIVE.value, "leader_id": self.leader_id})
+            await self._send_event("STATE_CHANGED", {"status": NodeStatus.FOLLOWER.value, "leader_id": self.leader_id})
 
-            # In both Bully and Ring modes, a revived node initiates an election to resolve leadership
-            # Bully: highest node asserts immediate dominance / takeover (FR-8)
-            # Ring: token traverses active ring to discover / elect highest alive node
-            logger.info(
-                f"Node {self.node_id}: Revived in {self.algorithm.value} mode, initiating election..."
-            )
-            asyncio.create_task(self.trigger_election())
-            return {"status": "ok", "node_id": self.node_id, "state": "ALIVE"}
+            if self.algorithm == AlgorithmType.BULLY:
+                logger.info(f"Node {self.node_id}: Revived in Bully mode, initiating takeover election...")
+                asyncio.create_task(self.trigger_election())
+            else:
+                logger.info(f"Node {self.node_id}: Revived in Ring mode, rejoining ring and querying peer...")
+                asyncio.create_task(self._query_peer_for_leader())
+
+            return {"status": "ok", "node_id": self.node_id, "state": "FOLLOWER"}
 
         elif action == ControlAction.SET_ALGORITHM.value:
             algo_str = data.get("algorithm", "bully").lower()
@@ -401,7 +473,12 @@ class Node:
             return {"status": "ok", "peers": self.peers}
 
         elif action == ControlAction.START_ELECTION.value:
-            asyncio.create_task(self.trigger_election())
+            # If forced, cancel electing check and start fresh
+            if self.status != NodeStatus.DEAD:
+                if self.algorithm == AlgorithmType.BULLY:
+                    asyncio.create_task(self.bully.start_election())
+                else:
+                    asyncio.create_task(self.ring.start_election())
             return {"status": "ok", "message": "election_triggered"}
 
         elif action == ControlAction.GET_STATE.value:
@@ -411,11 +488,41 @@ class Node:
                 "status": self.status.value,
                 "leader_id": self.leader_id,
                 "algorithm": self.algorithm.value,
+                "current_election_id": self.current_election_id,
                 "lamport": self.clock.value,
                 "peers": list(self.peers.keys()),
             }
 
         return {"status": "error", "message": f"unknown action {action}"}
+
+    async def _query_peer_for_leader(self) -> None:
+        """In Ring mode, a revived node asks an alive peer for the current leader (Rule R7)."""
+        await asyncio.sleep(0.2)
+        other_peers = [pid for pid in self.peers if pid != self.node_id]
+        for pid in sorted(other_peers):
+            port = self.peers[pid]
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection("127.0.0.1", port),
+                    timeout=0.5,
+                )
+                req = {"type": MessageType.CONTROL.value, "action": ControlAction.GET_STATE.value}
+                writer.write((json.dumps(req) + "\n").encode("utf-8"))
+                await writer.drain()
+                resp = await asyncio.wait_for(reader.readline(), timeout=0.5)
+                writer.close()
+                await writer.wait_closed()
+                if resp:
+                    state = json.loads(resp.decode("utf-8").strip())
+                    lid = state.get("leader_id")
+                    if lid and lid != self.node_id:
+                        self.leader_id = lid
+                        self.status = NodeStatus.FOLLOWER
+                        await self._send_event("STATE_CHANGED", {"status": self.status.value, "leader_id": self.leader_id})
+                        logger.info(f"Node {self.node_id}: Learned leader {self.leader_id} from peer {pid}")
+                        return
+            except Exception:
+                pass
 
     # -------------------------------------------------------------------------
     # Gateway Telemetry Dispatcher
@@ -442,7 +549,6 @@ class Node:
             writer.close()
             await writer.wait_closed()
         except Exception:
-            # Gateway might not be listening yet; node continues running safely
             pass
 
 
@@ -453,8 +559,8 @@ def main() -> None:
     parser.add_argument("--peers", type=str, default="{}", help="JSON dictionary of id:port peers")
     parser.add_argument("--algo", type=str, default="bully", choices=["bully", "ring"], help="Election algorithm")
     parser.add_argument("--gateway-port", type=int, default=None, help="Gateway telemetry port")
-    parser.add_argument("--ping-interval", type=float, default=2.0, help="Heartbeat ping interval in seconds")
-    parser.add_argument("--heartbeat-timeout", type=float, default=3.0, help="Heartbeat timeout in seconds")
+    parser.add_argument("--ping-interval", type=float, default=1.0, help="Heartbeat ping interval in seconds")
+    parser.add_argument("--heartbeat-timeout", type=float, default=2.2, help="Heartbeat timeout in seconds")
 
     args = parser.parse_args()
 

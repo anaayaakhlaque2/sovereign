@@ -12,10 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class NodeStatus(str, Enum):
-    ALIVE = "ALIVE"
-    DEAD = "DEAD"
+    FOLLOWER = "FOLLOWER"
     ELECTING = "ELECTING"
     LEADER = "LEADER"
+    DEAD = "DEAD"
+    ALIVE = "FOLLOWER"  # Backward compatibility alias
 
 
 class AlgorithmType(str, Enum):
@@ -92,6 +93,7 @@ class Message(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
     lamport: int = 0
     ts: float = Field(default_factory=time.time)
+    delivered: bool = True
 
     def to_json(self) -> str:
         """Serialize as a single line JSON string terminated by newline."""
