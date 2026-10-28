@@ -85,6 +85,7 @@ class Node:
             get_lamport=lambda: self.clock.value,
             ok_timeout=ok_timeout,
             coordinator_timeout=coordinator_timeout,
+            is_alive=lambda: self.status != NodeStatus.DEAD,
         )
         self.ring = RingElection(
             node_id=self.node_id,
@@ -93,6 +94,7 @@ class Node:
             on_state_change=self._on_state_change,
             get_lamport=lambda: self.clock.value,
             token_timeout=ring_token_timeout,
+            is_alive=lambda: self.status != NodeStatus.DEAD,
         )
         self.heartbeat = HeartbeatDetector(
             node_id=self.node_id,
@@ -168,7 +170,9 @@ class Node:
 
                     # If node is dead, refuse/ignore regular peer messages
                     if self.status == NodeStatus.DEAD:
-                        continue
+                        writer.close()
+                        await writer.wait_closed()
+                        return
 
                     # Otherwise, standard protocol message: acknowledge receipt
                     writer.write(b'{"ack": true}\n')
@@ -274,7 +278,7 @@ class Node:
         )
 
         # Retry under lossy fault injection (suspect k)
-        max_attempts = 3 if (self.drop_rate > 0.0 and is_election_msg) else 1
+        max_attempts = 3 if self.drop_rate > 0.0 else 1
         for attempt in range(max_attempts):
             if attempt > 0:
                 await asyncio.sleep(0.05)
@@ -408,6 +412,9 @@ class Node:
     # -------------------------------------------------------------------------
 
     async def _on_state_change(self, new_status: NodeStatus, new_leader: Optional[int]) -> None:
+        if self.status == NodeStatus.DEAD:
+            logger.warning(f"Node {self.node_id}: Ignoring state change to {new_status} because node is DEAD!")
+            return
         old_status = self.status
         self.status = new_status
         if new_leader is not None:
@@ -463,8 +470,7 @@ class Node:
             return {"status": "ok", "node_id": self.node_id, "state": "DEAD"}
 
         elif action == ControlAction.REVIVE.value:
-            # Rule R7: A node that is revived starts an election in Bully mode.
-            # In Ring mode it just rejoins the ring and learns the leader from the next COORDINATOR or by asking a peer.
+            # Rule R7 & User Request: Reviving a node immediately starts an election
             self.status = NodeStatus.FOLLOWER
             self.leader_id = None
             self.ring.reset()
@@ -475,10 +481,10 @@ class Node:
 
             if self.algorithm == AlgorithmType.BULLY:
                 logger.info(f"Node {self.node_id}: Revived in Bully mode, initiating takeover election...")
-                asyncio.create_task(self.trigger_election())
+                asyncio.create_task(self.bully.start_election())
             else:
-                logger.info(f"Node {self.node_id}: Revived in Ring mode, rejoining ring and querying peer...")
-                asyncio.create_task(self._query_peer_for_leader())
+                logger.info(f"Node {self.node_id}: Revived in Ring mode, initiating ring election...")
+                asyncio.create_task(self.ring.start_election())
 
             return {"status": "ok", "node_id": self.node_id, "state": "FOLLOWER"}
 
@@ -527,8 +533,13 @@ class Node:
     async def _query_peer_for_leader(self) -> None:
         """In Ring mode, a revived node asks an alive peer for the current leader (Rule R7)."""
         await asyncio.sleep(0.2)
+        if self.status == NodeStatus.DEAD:
+            return
+
         other_peers = [pid for pid in self.peers if pid != self.node_id]
         for pid in sorted(other_peers):
+            if self.status == NodeStatus.DEAD:
+                return
             port = self.peers[pid]
             try:
                 reader, writer = await asyncio.wait_for(
@@ -541,10 +552,14 @@ class Node:
                 resp = await asyncio.wait_for(reader.readline(), timeout=0.5)
                 writer.close()
                 await writer.wait_closed()
-                if resp:
+                if resp and self.status != NodeStatus.DEAD:
                     state = json.loads(resp.decode("utf-8").strip())
                     lid = state.get("leader_id")
                     if lid and lid != self.node_id:
+                        if lid < self.node_id:
+                            logger.info(f"Node {self.node_id}: Peer {pid} reported lower leader {lid}. Initiating takeover election.")
+                            asyncio.create_task(self.trigger_election())
+                            return
                         self.leader_id = lid
                         self.status = NodeStatus.FOLLOWER
                         await self._send_event("STATE_CHANGED", {"status": self.status.value, "leader_id": self.leader_id})

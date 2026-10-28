@@ -138,6 +138,8 @@ async def kill_node(node_id: int):
     success = await supervisor.kill_node(node_id)
     if not success:
         raise HTTPException(status_code=400, detail=f"Failed to kill Node {node_id}")
+    # Trigger election immediately on crash click per user request
+    await supervisor.trigger_election()
     return {"status": "ok", "message": f"Node {node_id} assassinated / killed"}
 
 
@@ -147,6 +149,8 @@ async def revive_node(node_id: int):
     success = await supervisor.revive_node(node_id)
     if not success:
         raise HTTPException(status_code=400, detail=f"Failed to revive Node {node_id}")
+    # Trigger election immediately on revive click per user request
+    await supervisor.trigger_election(node_id)
     return {"status": "ok", "message": f"Node {node_id} revived"}
 
 
@@ -156,6 +160,8 @@ async def assassinate_leader():
     leader = await supervisor.assassinate_leader()
     if leader is None:
         raise HTTPException(status_code=404, detail="No active sovereign leader found to assassinate")
+    # Trigger election immediately on leader assassination
+    await supervisor.trigger_election()
     return {"status": "ok", "message": f"Sovereign Leader Node {leader} has been struck down!", "leader_id": leader}
 
 

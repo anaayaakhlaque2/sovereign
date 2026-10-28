@@ -158,7 +158,11 @@ async def test_t3_cascade_crashes(algo: AlgorithmType):
         await cluster[1].trigger_election()
         for _ in range(50):
             alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
-            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
+            if (
+                all(node.leader_id == 4 for node in alive)
+                and cluster[4].status == NodeStatus.LEADER
+                and all(node.status != NodeStatus.ELECTING for node in alive)
+            ):
                 break
             await asyncio.sleep(0.08)
         assert_invariants_i1_to_i4(cluster, expected_leader=4)
@@ -241,7 +245,11 @@ async def test_t5_crash_leader_and_node_1_simultaneously(algo: AlgorithmType):
 
         for _ in range(50):
             alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
-            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
+            if (
+                all(node.leader_id == 4 for node in alive)
+                and cluster[4].status == NodeStatus.LEADER
+                and all(node.status != NodeStatus.ELECTING for node in alive)
+            ):
                 break
             await asyncio.sleep(0.08)
 
@@ -270,7 +278,11 @@ async def test_t6_two_initiators_at_once_converges_to_single_leader(algo: Algori
 
         for _ in range(60):
             alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
-            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
+            if (
+                all(node.leader_id == 4 for node in alive)
+                and cluster[4].status == NodeStatus.LEADER
+                and all(node.status != NodeStatus.ELECTING for node in alive)
+            ):
                 break
             await asyncio.sleep(0.08)
 
@@ -358,7 +370,11 @@ async def test_t8_revive_n_after_crashing():
         await r_cluster[1].trigger_election()
         for _ in range(50):
             alive = [node for node in r_cluster.values() if node.status != NodeStatus.DEAD]
-            if all(node.leader_id == 5 for node in alive) and r_cluster[5].status == NodeStatus.LEADER:
+            if (
+                all(node.leader_id == 5 for node in alive)
+                and r_cluster[5].status == NodeStatus.LEADER
+                and all(node.status != NodeStatus.ELECTING for node in alive)
+            ):
                 break
             await asyncio.sleep(0.08)
         assert_invariants_i1_to_i4(r_cluster, expected_leader=5)
@@ -411,7 +427,11 @@ async def test_t10_latency_and_packet_drop_converges(algo: AlgorithmType):
 
         for _ in range(80):
             alive = [node for node in cluster.values() if node.status != NodeStatus.DEAD]
-            if all(node.leader_id == 4 for node in alive) and cluster[4].status == NodeStatus.LEADER:
+            if (
+                all(node.leader_id == 4 for node in alive)
+                and cluster[4].status == NodeStatus.LEADER
+                and all(node.status != NodeStatus.ELECTING for node in alive)
+            ):
                 break
             await asyncio.sleep(0.1)
 

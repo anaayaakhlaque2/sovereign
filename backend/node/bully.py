@@ -24,6 +24,7 @@ class BullyElection:
         get_lamport: Optional[Callable[[], int]] = None,
         ok_timeout: float = 1.0,
         coordinator_timeout: float = 3.0,
+        is_alive: Optional[Callable[[], bool]] = None,
     ) -> None:
         self.node_id = node_id
         self.get_peers = get_peers
@@ -31,12 +32,14 @@ class BullyElection:
         self.broadcast_message = broadcast_message
         self.on_state_change = on_state_change
         self.get_lamport = get_lamport
+        self.is_alive = is_alive
 
         self.ok_timeout = ok_timeout
         self.coordinator_timeout = coordinator_timeout
 
         self.current_election_id: Optional[str] = None
         self.election_initiator_id: Optional[int] = None
+        self.current_election_lamport: int = 0
         self._ok_timer_task: Optional[asyncio.Task] = None
         self._coord_timer_task: Optional[asyncio.Task] = None
         self._received_ok: bool = False
@@ -54,9 +57,12 @@ class BullyElection:
 
     async def start_election(self, forced_election_id: Optional[str] = None) -> None:
         """Starts a Bully election from this node."""
+        if self.is_alive and not self.is_alive():
+            return
         self.cancel_timers()
         self._counter += 1
         lamp = self.get_lamport() if self.get_lamport else self._counter
+        self.current_election_lamport = lamp
         self.current_election_id = forced_election_id or f"bully-{self.node_id}-{lamp}-{uuid.uuid4().hex[:6]}"
         self._handled_elections.add(self.current_election_id)
         self.election_initiator_id = self.node_id
@@ -151,6 +157,10 @@ class BullyElection:
 
     async def handle_ok_message(self, msg: Message) -> None:
         """Handle incoming OK message from a higher node."""
+        if self.current_election_id and msg.election_id and msg.election_id != self.current_election_id:
+            logger.info(f"Node {self.node_id}: Dropping OK from {msg.from_node} for old election {msg.election_id}")
+            return
+
         logger.info(f"Node {self.node_id}: Received OK from higher node {msg.from_node}")
         self._received_ok = True
         if self._ok_timer_task and not self._ok_timer_task.done():
@@ -169,7 +179,8 @@ class BullyElection:
 
         # Rule 5: A node receiving COORDINATOR from a lower id than itself must reject it
         # and start its own election (a higher node has returned).
-        if new_leader < self.node_id:
+        alive = self.is_alive() if self.is_alive else True
+        if alive and new_leader < self.node_id:
             logger.warning(
                 f"Node {self.node_id}: Received COORDINATOR from lower node {new_leader}! Bullying and initiating takeover election."
             )

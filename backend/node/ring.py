@@ -22,6 +22,7 @@ class RingElection:
         on_state_change: Callable[[NodeStatus, Optional[int]], Coroutine[Any, Any, None]],
         get_lamport: Optional[Callable[[], int]] = None,
         token_timeout: Optional[float] = None,
+        is_alive: Optional[Callable[[], bool]] = None,
     ) -> None:
         self.node_id = int(node_id)
         self.get_peers = get_peers
@@ -29,9 +30,11 @@ class RingElection:
         self.on_state_change = on_state_change
         self.get_lamport = get_lamport
         self.token_timeout = token_timeout
+        self.is_alive = is_alive
 
         self.current_election_id: Optional[str] = None
         self.current_initiator_id: Optional[int] = None
+        self.current_election_lamport: int = 0
         self._counter: int = 0
         self._active: bool = False
         self._timer_task: Optional[asyncio.Task] = None
@@ -93,12 +96,15 @@ class RingElection:
 
     async def start_election(self) -> None:
         """Starts a Ring election initiated by this node."""
+        if self.is_alive and not self.is_alive():
+            return
         self.cancel_timers()
         self._counter += 1
         lamp = self.get_lamport() if self.get_lamport else self._counter
         election_id = f"ring-{self.node_id}-{lamp}-{uuid.uuid4().hex[:6]}"
         self.current_election_id = election_id
         self.current_initiator_id = self.node_id
+        self.current_election_lamport = lamp
         self._active = True
 
         peers = self.get_peers()
@@ -140,6 +146,14 @@ class RingElection:
         initiator = int(payload.get("initiator", msg.from_node))
         ids: List[int] = [int(x) for x in payload.get("ids", payload.get("alive", []))]
 
+        # Stale token check (Suspect g)
+        if self._active and msg.lamport and self.current_election_lamport:
+            if msg.lamport < self.current_election_lamport:
+                logger.info(
+                    f"Node {self.node_id}: Dropping stale Ring election token (lamport {msg.lamport} < current {self.current_election_lamport})"
+                )
+                return
+
         # Rule 5: If two initiators start at once, a node that already joined an election
         # with a HIGHER initiator id drops tokens from a lower initiator.
         if self._active and self.current_initiator_id is not None:
@@ -151,6 +165,7 @@ class RingElection:
 
         self.current_election_id = msg.election_id
         self.current_initiator_id = initiator
+        self.current_election_lamport = max(self.current_election_lamport, msg.lamport)
         self._active = True
 
         # Rule 4: When the token returns to the initiator (initiator already in ids), the leader is max(ids).
@@ -203,6 +218,17 @@ class RingElection:
         initiator = int(payload.get("initiator", msg.from_node))
         raw_leader = payload.get("leader")
         leader = int(raw_leader) if raw_leader is not None else initiator
+
+        # Safeguard: A living node must NEVER accept a leader lower than itself!
+        # If an incoming coordinator announces a leader lower than this node,
+        # reject it and immediately initiate an election to establish true leadership.
+        alive = self.is_alive() if self.is_alive else True
+        if alive and leader < self.node_id:
+            logger.warning(
+                f"Node {self.node_id}: Received RING_COORDINATOR with lower leader {leader}! Rejecting and initiating takeover election."
+            )
+            asyncio.create_task(self.start_election())
+            return
 
         logger.info(f"Node {self.node_id}: Received RING_COORDINATOR token with leader {leader}")
         status = NodeStatus.LEADER if leader == self.node_id else NodeStatus.FOLLOWER

@@ -209,6 +209,7 @@ class ClusterSupervisor:
                     "lamport": 0,
                     "ts": time.time(),
                 })
+                await self.telemetry.broadcast_ws(self.telemetry.get_cluster_snapshot())
             return True
         return False
 
@@ -228,6 +229,7 @@ class ClusterSupervisor:
                     "lamport": 0,
                     "ts": time.time(),
                 })
+                await self.telemetry.broadcast_ws(self.telemetry.get_cluster_snapshot())
             return True
         return False
 
@@ -273,11 +275,11 @@ class ClusterSupervisor:
 
     async def trigger_election(self, initiator_id: Optional[int] = None) -> bool:
         """Triggers an election starting from a specific node or lowest alive node."""
-        target = initiator_id
-        if target is None:
-            alive = [nid for nid, c in self.node_cache.items() if c.get("status") != NodeStatus.DEAD.value]
-            target = min(alive) if alive else None
+        alive = [nid for nid, c in self.node_cache.items() if c.get("status") != NodeStatus.DEAD.value]
+        if not alive:
+            return False
 
+        target = initiator_id if (initiator_id is not None and initiator_id in alive) else min(alive)
         if target:
             reply = await self.send_control(target, {"action": ControlAction.START_ELECTION.value})
             return bool(reply and reply.get("status") == "ok")
